@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'screens/auth_screens.dart';
 import 'screens/shell.dart';
+import 'screens/splash_screen.dart';
 import 'screens/update_screen.dart';
 import 'services/notify_service.dart';
 import 'services/prefs.dart';
@@ -32,11 +33,17 @@ Future<void> main() async {
 /// Who is signed in. Listens to Firebase once for the whole app.
 class AuthState extends ChangeNotifier {
   User? user;
-  bool ready = false;
+  bool _gotUser = false, _splashDone = false;
+  bool get ready => _gotUser && _splashDone;
   AuthState() {
     FirebaseAuth.instance.userChanges().listen((u) {
       user = u;
-      ready = true;
+      _gotUser = true;
+      notifyListeners();
+    });
+    // Show the splash for a moment so it doesn't flash.
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      _splashDone = true;
       notifyListeners();
     });
   }
@@ -83,9 +90,16 @@ class AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
-    if (!auth.ready) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     final user = auth.user;
-    if (user == null) return const WelcomeScreen();
-    return Shell(key: ValueKey(user.uid));
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 500),
+      switchInCurve: Curves.easeOutCubic,
+      transitionBuilder: (child, a) => FadeTransition(opacity: a, child: ScaleTransition(scale: Tween(begin: 1.03, end: 1.0).animate(a), child: child)),
+      child: !auth.ready
+          ? const SplashScreen(key: ValueKey('splash'))
+          : user == null
+              ? const WelcomeScreen(key: ValueKey('welcome'))
+              : Shell(key: ValueKey(user.uid)),
+    );
   }
 }

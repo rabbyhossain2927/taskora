@@ -66,7 +66,9 @@ class RoundButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Tooltip(
         message: tooltip,
-        child: Material(
+        child: Pressable(
+          scale: 0.9,
+          child: Material(
           color: bg ?? context.surface,
           shape: CircleBorder(side: BorderSide(color: context.isDark ? Colors.white10 : C.line)),
           child: InkWell(
@@ -74,6 +76,7 @@ class RoundButton extends StatelessWidget {
             onTap: onTap,
             child: SizedBox(width: 44, height: 44, child: Icon(icon, size: 21, color: fg)),
           ),
+        ),
         ),
       );
 }
@@ -107,11 +110,54 @@ class Box extends StatelessWidget {
   final double radius;
   const Box({super.key, required this.child, this.padding = const EdgeInsets.all(16), this.color, this.onTap, this.radius = 22});
   @override
-  Widget build(BuildContext context) => Material(
-        color: color ?? context.surface,
-        borderRadius: BorderRadius.circular(radius),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(onTap: onTap, child: Padding(padding: padding, child: child)),
+  Widget build(BuildContext context) {
+    final m = Material(
+      color: color ?? context.surface,
+      borderRadius: BorderRadius.circular(radius),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(onTap: onTap, child: Padding(padding: padding, child: child)),
+    );
+    return onTap == null ? m : Pressable(child: m);
+  }
+}
+
+/// Shrinks a little while pressed, then springs back.
+class Pressable extends StatefulWidget {
+  final Widget child;
+  final double scale;
+  const Pressable({super.key, required this.child, this.scale = 0.97});
+  @override
+  State<Pressable> createState() => _PressableState();
+}
+
+class _PressableState extends State<Pressable> {
+  bool down = false;
+  @override
+  Widget build(BuildContext context) => Listener(
+        onPointerDown: (_) => setState(() => down = true),
+        onPointerUp: (_) => setState(() => down = false),
+        onPointerCancel: (_) => setState(() => down = false),
+        child: AnimatedScale(
+          scale: down ? widget.scale : 1,
+          duration: Duration(milliseconds: down ? 90 : 220),
+          curve: down ? Curves.easeOut : Curves.easeOutBack,
+          child: widget.child,
+        ),
+      );
+}
+
+/// A number that counts up when it appears or changes.
+class AnimatedCount extends StatelessWidget {
+  final int value;
+  final TextStyle? style;
+  final String suffix;
+  const AnimatedCount(this.value, {super.key, this.style, this.suffix = ''});
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: value.toDouble()),
+        duration: const Duration(milliseconds: 900),
+        curve: Curves.easeOutCubic,
+        builder: (_, v, __) => Text('${v.round()}$suffix', style: style),
       );
 }
 
@@ -178,7 +224,11 @@ class TagChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = pastel(tag.color);
-    return Material(
+    return AnimatedScale(
+      scale: selected ? 1 : 0.97,
+      duration: const Duration(milliseconds: 200),
+      child: Material(
+      animationDuration: const Duration(milliseconds: 220),
       color: selected ? p.bg : context.surface,
       shape: StadiumBorder(side: BorderSide(color: selected ? p.bg : (context.isDark ? Colors.white12 : C.line))),
       child: InkWell(
@@ -193,6 +243,7 @@ class TagChip extends StatelessWidget {
           ]),
         ),
       ),
+    ),
     );
   }
 }

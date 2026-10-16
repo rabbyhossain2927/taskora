@@ -88,7 +88,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         padding: const EdgeInsets.fromLTRB(20, 4, 20, 120),
                         itemCount: list.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (_, i) => _row(s, list[i]),
+                        itemBuilder: (_, i) => FadeIn(index: i, child: _row(s, list[i])),
                       ),
                     ),
             ),

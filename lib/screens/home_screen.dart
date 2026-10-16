@@ -120,30 +120,6 @@ class HomeScreen extends StatelessWidget {
           FadeIn(index: i++, child: _TodayCard(total: total, done: doneToday, due: dueToday.length, active: active.length, notes: s.notes.length)),
           const SizedBox(height: 12),
 
-          // ---------- quick actions ----------
-          FadeIn(
-            index: i++,
-            child: Row(children: [
-              _Quick(icon: Icons.add_task_rounded, label: 'To-do', color: 8, onTap: () => _open(context, const TodoEditor(), modal: true)),
-              _Quick(icon: Icons.create_new_folder_outlined, label: 'Project', color: 0, onTap: () => _open(context, const ProjectEditor(), modal: true)),
-              _Quick(icon: Icons.note_add_outlined, label: 'Note', color: 6, onTap: () => _open(context, const NoteEditor(), modal: true)),
-              _Quick(icon: Icons.event_note_outlined, label: 'Calendar', color: 12, onTap: () => _open(context, const CalendarScreen())),
-            ]),
-          ),
-          const SizedBox(height: 12),
-
-          // ---------- stats + focus ----------
-          FadeIn(
-            index: i++,
-            child: IntrinsicHeight(
-              child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Expanded(child: _StatsTile(store: s, onTap: () => _open(context, const StatsScreen()))),
-                const SizedBox(width: 12),
-                Expanded(child: _FocusTile(minutes: prefs.focusMinutes, onTap: () => _open(context, const FocusScreen()))),
-              ]),
-            ),
-          ),
-
           // ---------- due today ----------
           FadeIn(
             index: i++,
@@ -196,6 +172,19 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
           ],
+
+          // ---------- stats + focus ----------
+          const SizedBox(height: 14),
+          FadeIn(
+            index: i++,
+            child: IntrinsicHeight(
+              child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Expanded(child: _StatsTile(store: s, onTap: () => _open(context, const StatsScreen()))),
+                const SizedBox(width: 12),
+                Expanded(child: _FocusTile(minutes: prefs.focusMinutes, onTap: () => _open(context, const FocusScreen()))),
+              ]),
+            ),
+          ),
 
           // ---------- notes ----------
           if (prefs.showNotesOnHome && homeSections.isNotEmpty) ...[
@@ -283,33 +272,6 @@ class _Pill extends StatelessWidget {
           Text(text, style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w500)),
         ]),
       );
-}
-
-class _Quick extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final int color;
-  final VoidCallback onTap;
-  const _Quick({required this.icon, required this.label, required this.color, required this.onTap});
-  @override
-  Widget build(BuildContext context) {
-    final p = pastel(color);
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: Box(
-          onTap: onTap,
-          radius: 18,
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Column(children: [
-            Container(width: 36, height: 36, decoration: BoxDecoration(color: context.isDark ? p.fg.withOpacity(0.22) : p.bg, borderRadius: BorderRadius.circular(12)), child: Icon(icon, size: 19, color: context.isDark ? p.bg : p.fg)),
-            const SizedBox(height: 6),
-            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-          ]),
-        ),
-      ),
-    );
-  }
 }
 
 class _StatsTile extends StatelessWidget {

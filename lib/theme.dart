@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -90,12 +91,28 @@ const appThemes = <AppThemeOption>[
   AppThemeOption('Rose Pink', Color(0xFFDD2590)),
   AppThemeOption('Crimson Red', Color(0xFFD92D20)),
   AppThemeOption('Graphite', Color(0xFF3F3F4A)),
+  AppThemeOption('Lavender Mist', Color(0xFF8B7CF6)),
+  AppThemeOption('Plum', Color(0xFF9B3FB5)),
+  AppThemeOption('Berry', Color(0xFFC0266D)),
+  AppThemeOption('Mint', Color(0xFF12A97E)),
+  AppThemeOption('Forest', Color(0xFF2F7D32)),
+  AppThemeOption('Olive', Color(0xFF7A8B1E)),
+  AppThemeOption('Copper', Color(0xFFB4572B)),
+  AppThemeOption('Mocha', Color(0xFF8D5B3D)),
+  AppThemeOption('Slate', Color(0xFF475569)),
+  AppThemeOption('Midnight', Color(0xFF1E3A8A)),
 ];
 
 /// Background styles drawn behind every page.
 const bgStyles = <(String, String)>[
   ('glow', 'Soft glow'),
+  ('aurora', 'Aurora'),
+  ('mesh', 'Mesh'),
   ('silk', 'Silk lines'),
+  ('waves', 'Waves'),
+  ('grain', 'Grain'),
+  ('paper', 'Paper'),
+  ('grid', 'Grid'),
   ('dots', 'Dots'),
   ('plain', 'Plain'),
 ];
@@ -143,7 +160,7 @@ ThemeData buildTheme(AppThemeOption t, Brightness b, {String bgStyle = 'glow'}) 
       contentTextStyle: GoogleFonts.archivo(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 13.5),
       actionTextColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+      insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
@@ -196,10 +213,24 @@ class BackgroundPageTransitionsBuilder extends PageTransitionsBuilder {
   final bool dark;
   final String style;
   const BackgroundPageTransitionsBuilder(this.t, this.dark, this.style);
-  static const _inner = ZoomPageTransitionsBuilder();
   @override
-  Widget buildTransitions<T>(PageRoute<T> route, BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) =>
-      _inner.buildTransitions(route, context, animation, secondaryAnimation, AppBackground(t: t, dark: dark, style: style, child: child));
+  Duration get transitionDuration => const Duration(milliseconds: 380);
+  @override
+  Widget buildTransitions<T>(PageRoute<T> route, BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
+    final inA = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
+    final outA = CurvedAnimation(parent: secondaryAnimation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
+    final fromBottom = route.fullscreenDialog;
+    return SlideTransition(
+      position: Tween(begin: fromBottom ? const Offset(0, 0.10) : const Offset(0.12, 0), end: Offset.zero).animate(inA),
+      child: FadeTransition(
+        opacity: inA,
+        child: SlideTransition(
+          position: Tween(begin: Offset.zero, end: const Offset(-0.05, 0)).animate(outA),
+          child: AppBackground(t: t, dark: dark, style: style, child: child),
+        ),
+      ),
+    );
+  }
 }
 
 class AppBackground extends StatelessWidget {
@@ -240,7 +271,60 @@ class _BgPainter extends CustomPainter {
     );
     canvas.drawCircle(Offset(size.width * 0.9, 0), size.width * 0.5,
         Paint()..shader = RadialGradient(colors: [accent.withOpacity(dark ? 0.18 : 0.12), accent.withOpacity(0)]).createShader(Rect.fromCircle(center: Offset(size.width * 0.9, 0), radius: size.width * 0.5)));
-    if (style == 'silk') {
+    final rnd = math.Random(7);
+    if (style == 'aurora') {
+      final hues = [accent, HSLColor.fromColor(accent).withHue((HSLColor.fromColor(accent).hue + 40) % 360).toColor(), HSLColor.fromColor(accent).withHue((HSLColor.fromColor(accent).hue + 320) % 360).toColor()];
+      for (var i = 0; i < 3; i++) {
+        final c = Offset(size.width * [0.1, 0.6, 1.0][i], size.height * [0.05, 0.18, 0.02][i]);
+        final r = size.width * [0.55, 0.45, 0.5][i];
+        canvas.drawCircle(c, r, Paint()..shader = RadialGradient(colors: [hues[i].withOpacity(dark ? 0.22 : 0.16), hues[i].withOpacity(0)]).createShader(Rect.fromCircle(center: c, radius: r)));
+      }
+    } else if (style == 'mesh') {
+      final hue = HSLColor.fromColor(accent);
+      for (var i = 0; i < 5; i++) {
+        final c = Offset(size.width * rnd.nextDouble(), size.height * (0.05 + 0.45 * rnd.nextDouble()));
+        final r = size.width * (0.25 + 0.2 * rnd.nextDouble());
+        final col = hue.withHue((hue.hue + i * 28) % 360).toColor();
+        canvas.drawCircle(c, r, Paint()..shader = RadialGradient(colors: [col.withOpacity(dark ? 0.16 : 0.11), col.withOpacity(0)]).createShader(Rect.fromCircle(center: c, radius: r)));
+      }
+    } else if (style == 'waves') {
+      final p = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..color = accent.withOpacity(dark ? 0.12 : 0.09);
+      for (var i = 0; i < 10; i++) {
+        final path = Path();
+        final y0 = 30.0 + i * 26;
+        path.moveTo(0, y0);
+        for (double x = 0; x <= size.width; x += 8) {
+          path.lineTo(x, y0 + math.sin(x / 38 + i * 0.6) * 9);
+        }
+        canvas.drawPath(path, p);
+      }
+    } else if (style == 'grain') {
+      final p = Paint()..color = (dark ? Colors.white : Colors.black).withOpacity(dark ? 0.05 : 0.035);
+      for (var i = 0; i < 2600; i++) {
+        canvas.drawCircle(Offset(rnd.nextDouble() * size.width, rnd.nextDouble() * size.height), 0.7, p);
+      }
+    } else if (style == 'paper') {
+      final p = Paint()
+        ..color = accent.withOpacity(dark ? 0.08 : 0.06)
+        ..strokeWidth = 1;
+      for (double y = 28; y < size.height; y += 28) {
+        canvas.drawLine(Offset(0, y), Offset(size.width, y), p);
+      }
+      canvas.drawLine(const Offset(36, 0), Offset(36, size.height), Paint()..color = const Color(0xFFE5484D).withOpacity(dark ? 0.12 : 0.10));
+    } else if (style == 'grid') {
+      final p = Paint()
+        ..color = accent.withOpacity(dark ? 0.08 : 0.06)
+        ..strokeWidth = 1;
+      for (double x = 0; x < size.width; x += 24) {
+        canvas.drawLine(Offset(x, 0), Offset(x, size.height), p);
+      }
+      for (double y = 0; y < size.height; y += 24) {
+        canvas.drawLine(Offset(0, y), Offset(size.width, y), p);
+      }
+    } else if (style == 'silk') {
       final p = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1

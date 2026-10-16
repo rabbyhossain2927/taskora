@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import '../services/prefs.dart';
 import '../services/store.dart';
@@ -58,11 +59,11 @@ class ProfileScreen extends StatelessWidget {
               FadeIn(
                 index: 1,
                 child: Row(children: [
-                  _stat(context, '${s.projects.length}', 'Projects'),
+                  _stat(context, s.projects.length, 'Projects'),
                   const SizedBox(width: 10),
-                  _stat(context, '$done', 'Done'),
+                  _stat(context, done, 'Done'),
                   const SizedBox(width: 10),
-                  _stat(context, '${s.notes.length}', 'Notes'),
+                  _stat(context, s.notes.length, 'Notes'),
                 ]),
               ),
               const SizedBox(height: 12),
@@ -150,11 +151,8 @@ class ProfileScreen extends StatelessWidget {
                 icon: const Icon(Icons.logout_rounded),
                 label: const Text('Sign out'),
               ),
-              const SizedBox(height: 10),
-              FutureBuilder<AppVersion>(
-                future: UpdateService.current(),
-                builder: (_, v) => Text(v.hasData ? 'TaskOra ${v.data!.version} (build ${v.data!.build})' : '', textAlign: TextAlign.center, style: TextStyle(color: context.mutedText, fontSize: 12)),
-              ),
+              const SizedBox(height: 26),
+              const AppCredits(),
             ]),
           ),
         ]),
@@ -162,11 +160,11 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _stat(BuildContext context, String v, String l) => Expanded(
+  Widget _stat(BuildContext context, int v, String l) => Expanded(
         child: Box(
           padding: const EdgeInsets.symmetric(vertical: 14),
           child: Column(children: [
-            Text(v, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700)),
+            AnimatedCount(v, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700)),
             Text(l, style: TextStyle(color: context.mutedText, fontSize: 12, fontWeight: FontWeight.w500)),
           ]),
         ),
@@ -404,4 +402,42 @@ int streakOf(Store s) {
     d = d.subtract(const Duration(days: 1));
   }
   return n;
+}
+
+
+/// Footer: app name + version, developer, copyright and website.
+class AppCredits extends StatelessWidget {
+  const AppCredits({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final muted = context.mutedText;
+    return FadeIn(
+      index: 6,
+      child: Column(children: [
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(color: context.accent, borderRadius: BorderRadius.circular(8)),
+            child: const Icon(Icons.bolt_rounded, size: 16, color: Colors.white),
+          ),
+          const SizedBox(width: 8),
+          FutureBuilder<AppVersion>(
+            future: UpdateService.current(),
+            builder: (_, v) => Text(v.hasData ? 'TaskOra ${v.data!.version}' : 'TaskOra', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        Text('Developed by Rabby Hossain', style: TextStyle(color: muted, fontSize: 12.5)),
+        const SizedBox(height: 2),
+        Text('© ${DateTime.now().year} TaskOra. All rights reserved.', style: TextStyle(color: muted, fontSize: 12)),
+        const SizedBox(height: 4),
+        GestureDetector(
+          onTap: () => launchUrl(Uri.parse('https://rabbyhossain.com'), mode: LaunchMode.externalApplication),
+          child: Text('rabbyhossain.com', style: TextStyle(color: context.accent, fontSize: 12.5, fontWeight: FontWeight.w600)),
+        ),
+        const SizedBox(height: 8),
+      ]),
+    );
+  }
 }

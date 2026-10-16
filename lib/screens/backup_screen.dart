@@ -150,9 +150,9 @@ class _BackupScreenState extends State<BackupScreen> {
                       if (err) Padding(padding: const EdgeInsets.only(top: 6), child: Text(s.syncError!, textAlign: TextAlign.center, style: const TextStyle(color: C.red, fontSize: 12.5))),
                       const SizedBox(height: 16),
                       Row(children: [
-                        _count(context, '${s.projects.length}', 'Projects'),
-                        _count(context, '${s.todos.length}', 'To-dos'),
-                        _count(context, '${s.notes.length}', 'Notes'),
+                        _count(context, s.projects.length, 'Projects'),
+                        _count(context, s.todos.length, 'To-dos'),
+                        _count(context, s.notes.length, 'Notes'),
                       ]),
                       const SizedBox(height: 16),
                       FilledButton.icon(
@@ -297,9 +297,9 @@ class _BackupScreenState extends State<BackupScreen> {
     );
   }
 
-  Widget _count(BuildContext context, String v, String l) => Expanded(
+  Widget _count(BuildContext context, int v, String l) => Expanded(
         child: Column(children: [
-          Text(v, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+          AnimatedCount(v, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
           Text(l, style: TextStyle(fontSize: 12, color: context.mutedText)),
         ]),
       );

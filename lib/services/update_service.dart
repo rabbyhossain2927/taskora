@@ -1,4 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -125,6 +129,54 @@ class UpdateService {
 
   /// Opens the APK download. Android then asks the user to install it
   /// (the first time it asks to allow installs from the browser).
-  static Future<bool> download(UpdateInfo u) =>
+  /// Opens the release page in the browser (fallback if in-app install fails).
+  static Future<bool> openInBrowser(UpdateInfo u) =>
       launchUrl(Uri.parse(u.apkUrl), mode: LaunchMode.externalApplication);
+
+  /// Downloads the new APK inside the app. [onProgress] gets (received, total) bytes.
+  /// Returns the downloaded file.
+  static Future<File> downloadApk(UpdateInfo u, void Function(int received, int total) onProgress, {bool Function()? cancelled}) async {
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/TaskOra-${u.version}.apk');
+    if (await file.exists() && u.sizeBytes > 0 && await file.length() == u.sizeBytes) {
+      onProgress(u.sizeBytes, u.sizeBytes);
+      return file; // already downloaded
+    }
+    final client = http.Client();
+    try {
+      final res = await client.send(http.Request('GET', Uri.parse(u.apkUrl))).timeout(const Duration(seconds: 30));
+      if (res.statusCode != 200) throw 'Download failed (${res.statusCode}).';
+      final total = res.contentLength ?? u.sizeBytes;
+      final sink = file.openWrite();
+      var got = 0;
+      try {
+        await for (final chunk in res.stream) {
+          if (cancelled?.call() == true) throw 'cancelled';
+          sink.add(chunk);
+          got += chunk.length;
+          onProgress(got, total);
+        }
+      } finally {
+        await sink.close();
+      }
+      if (total > 0 && got < total) throw 'Download was interrupted. Please try again.';
+      return file;
+    } catch (e) {
+      try {
+        await file.delete();
+      } catch (_) {}
+      rethrow;
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Opens Android's installer for the downloaded APK.
+  /// The first time, Android asks to allow installs from TaskOra.
+  static Future<String?> install(File apk) async {
+    final r = await OpenFilex.open(apk.path, type: 'application/vnd.android.package-archive');
+    return r.type == ResultType.done ? null : r.message;
+  }
+
+  static String mb(int bytes) => '${(bytes / 1048576).toStringAsFixed(1)} MB';
 }

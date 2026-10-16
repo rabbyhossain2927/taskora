@@ -24,15 +24,20 @@ class Shell extends StatefulWidget {
   State<Shell> createState() => ShellState();
 }
 
-class ShellState extends State<Shell> with WidgetsBindingObserver {
+class ShellState extends State<Shell> with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   late int tab = Prefs.instance.startTab.clamp(0, 3);
+  late final AnimationController fade = AnimationController(vsync: this, duration: const Duration(milliseconds: 360), value: 1);
   bool menuOpen = false;
 
   static ShellState? of(BuildContext context) => context.findAncestorStateOfType<ShellState>();
-  void go(int i) => setState(() {
-        tab = i.clamp(0, 3);
-        menuOpen = false;
-      });
+  void go(int i) {
+    final next = i.clamp(0, 3);
+    if (next != tab) fade.forward(from: 0);
+    setState(() {
+      tab = next;
+      menuOpen = false;
+    });
+  }
 
   @override
   void initState() {
@@ -49,6 +54,7 @@ class ShellState extends State<Shell> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    fade.dispose();
     super.dispose();
   }
 
@@ -80,14 +86,21 @@ class ShellState extends State<Shell> with WidgetsBindingObserver {
           if (menuOpen) {
             menuOpen = false;
           } else {
-            tab = 0;
+            go(0);
           }
         });
       },
       child: Scaffold(
         extendBody: true,
         body: Stack(children: [
-          IndexedStack(index: tab, children: pages),
+          AnimatedBuilder(
+            animation: fade,
+            builder: (_, child) {
+              final v = Curves.easeOutCubic.transform(fade.value);
+              return Opacity(opacity: 0.35 + 0.65 * v, child: Transform.translate(offset: Offset(0, (1 - v) * 14), child: child));
+            },
+            child: IndexedStack(index: tab, children: pages),
+          ),
           IgnorePointer(
             ignoring: !menuOpen,
             child: AnimatedOpacity(
@@ -98,7 +111,7 @@ class ShellState extends State<Shell> with WidgetsBindingObserver {
           ),
           Positioned(
             right: 20,
-            bottom: 104 + MediaQuery.of(context).padding.bottom,
+            bottom: 112 + MediaQuery.of(context).padding.bottom,
             child: IgnorePointer(
               ignoring: !menuOpen,
               child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -139,8 +152,8 @@ class ShellState extends State<Shell> with WidgetsBindingObserver {
                     },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 220),
-                      width: 62,
-                      height: 62,
+                      width: 70,
+                      height: 70,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: LinearGradient(
@@ -222,11 +235,11 @@ class _NavPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = context.isDark;
     return Container(
-      height: 62,
-      padding: const EdgeInsets.all(6),
+      height: 70,
+      padding: const EdgeInsets.all(7),
       decoration: BoxDecoration(
         color: dark ? const Color(0xFF22222C) : Colors.white,
-        borderRadius: BorderRadius.circular(31),
+        borderRadius: BorderRadius.circular(35),
         border: Border.all(color: dark ? Colors.white10 : context.accent.withOpacity(0.10)),
         boxShadow: [BoxShadow(color: (dark ? Colors.black : context.accent).withOpacity(dark ? 0.4 : 0.12), blurRadius: 24, offset: const Offset(0, 10))],
       ),
@@ -244,13 +257,14 @@ class _NavPill extends StatelessWidget {
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 260),
                   curve: Curves.easeOutCubic,
-                  decoration: BoxDecoration(color: i == tab ? context.tint : Colors.transparent, borderRadius: BorderRadius.circular(25)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(color: i == tab ? context.tint : Colors.transparent, borderRadius: BorderRadius.circular(28)),
                   child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                     Icon(i == tab ? items[i].$2 : items[i].$1, size: 22, color: i == tab ? context.accent : context.mutedText),
                     if (i == tab)
                       Flexible(
                         child: Padding(
-                          padding: const EdgeInsets.only(left: 6),
+                          padding: const EdgeInsets.only(left: 8),
                           child: Text(items[i].$3,
                               maxLines: 1,
                               overflow: TextOverflow.fade,
