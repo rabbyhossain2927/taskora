@@ -285,7 +285,8 @@ class _NavPill extends StatelessWidget {
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => onTap(i),
-                    child: Center(
+                    child: ClipRect(
+                      child: Center(
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
                         AnimatedSwitcher(
                           duration: const Duration(milliseconds: 220),
@@ -312,6 +313,7 @@ class _NavPill extends StatelessWidget {
                               : const SizedBox.shrink(),
                         ),
                       ]),
+                    ),
                     ),
                   ),
                 ),
