@@ -1,0 +1,31 @@
+name: Check code
+
+# Runs on every push: finds compile errors fast (no APK).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.1'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Analyze
+        run: |
+          flutter analyze --no-fatal-infos --no-fatal-warnings > analyze.txt 2>&1 || true
+          cat analyze.txt
+          # Turn each error into an annotation (shown on the run page / API)
+          grep -E "^\s*error •" analyze.txt | head -45 | while IFS= read -r l; do
+            f=$(echo "$l" | awk -F' • ' '{print $3}' | cut -d: -f1)
+            ln=$(echo "$l" | awk -F' • ' '{print $3}' | cut -d: -f2)
+            msg=$(echo "$l" | awk -F' • ' '{print $2}')
+            echo "::error file=$f,line=$ln::$f:$ln $msg"
+          done
+          if grep -qE "^\s*error •" analyze.txt; then exit 1; fi
