@@ -56,7 +56,11 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::warning::No KEYSTORE_BASE64 secret - using a temporary debug key. Updates will NOT install over this build."
+            if [[ "${{ github.event_name }}" == "push" || "${{ github.event.inputs.publish }}" == "true" ]]; then
+              echo "::error::Add the 4 signing secrets (Settings > Secrets and variables > Actions) before publishing a release."
+              exit 1
+            fi
+            echo "::warning::No KEYSTORE_BASE64 secret - test build with a temporary key (not published)."
             exit 0
           fi
           echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
