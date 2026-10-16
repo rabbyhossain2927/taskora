@@ -152,8 +152,8 @@ class ShellState extends State<Shell> with WidgetsBindingObserver, SingleTickerP
                     },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 220),
-                      width: 70,
-                      height: 70,
+                      width: 66,
+                      height: 66,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: LinearGradient(
@@ -221,6 +221,8 @@ class _AddItem extends StatelessWidget {
   }
 }
 
+/// Dark pill bar; the selected tab is a light pill with its icon and name
+/// that slides between tabs. Colours follow the theme.
 class _NavPill extends StatelessWidget {
   final int tab;
   final ValueChanged<int> onTap;
@@ -234,50 +236,89 @@ class _NavPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = context.isDark;
+    final a = context.accent;
+    // Deep shade of the theme colour (near-black, like the reference)
+    final bar = dark ? Color.lerp(a, const Color(0xFF0E0E13), 0.80)! : Color.lerp(a, const Color(0xFF14141B), 0.84)!;
+    const pad = 6.0;
+    const curve = Curves.easeOutCubic;
+    const dur = Duration(milliseconds: 320);
     return Container(
-      height: 70,
-      padding: const EdgeInsets.all(7),
+      height: 66,
+      padding: const EdgeInsets.all(pad),
       decoration: BoxDecoration(
-        color: dark ? const Color(0xFF22222C) : Colors.white,
-        borderRadius: BorderRadius.circular(35),
-        border: Border.all(color: dark ? Colors.white10 : context.accent.withOpacity(0.10)),
-        boxShadow: [BoxShadow(color: (dark ? Colors.black : context.accent).withOpacity(dark ? 0.4 : 0.12), blurRadius: 24, offset: const Offset(0, 10))],
+        color: bar,
+        borderRadius: BorderRadius.circular(33),
+        boxShadow: [BoxShadow(color: bar.withOpacity(0.35), blurRadius: 22, offset: const Offset(0, 10))],
       ),
-      child: Row(children: [
-        for (var i = 0; i < items.length; i++)
-          Expanded(
-            flex: i == tab ? 5 : 3,
-            child: Semantics(
-              selected: i == tab,
-              button: true,
-              label: items[i].$3,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => onTap(i),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 260),
-                  curve: Curves.easeOutCubic,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(color: i == tab ? context.tint : Colors.transparent, borderRadius: BorderRadius.circular(28)),
-                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Icon(i == tab ? items[i].$2 : items[i].$1, size: 22, color: i == tab ? context.accent : context.mutedText),
-                    if (i == tab)
-                      Flexible(
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 8),
-                          child: Text(items[i].$3,
-                              maxLines: 1,
-                              overflow: TextOverflow.fade,
-                              softWrap: false,
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.onTint)),
-                        ),
-                      ),
-                  ]),
-                ),
+      child: LayoutBuilder(builder: (context, c) {
+        final w = c.maxWidth;
+        final selW = w * 0.40;
+        final otherW = (w - selW) / (items.length - 1);
+        double leftOf(int i) => i <= tab ? i * otherW : selW + (i - 1) * otherW;
+        return Stack(children: [
+          // Sliding light pill
+          AnimatedPositioned(
+            duration: dur,
+            curve: curve,
+            left: leftOf(tab),
+            top: 0,
+            bottom: 0,
+            width: selW,
+            child: Container(
+              decoration: BoxDecoration(
+                color: dark ? const Color(0xFFF3F3F7) : Colors.white,
+                borderRadius: BorderRadius.circular(27),
+                boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 8, offset: Offset(0, 2))],
               ),
             ),
           ),
-      ]),
+          Row(children: [
+            for (var i = 0; i < items.length; i++)
+              AnimatedContainer(
+                duration: dur,
+                curve: curve,
+                width: i == tab ? selW : otherW,
+                child: Semantics(
+                  selected: i == tab,
+                  button: true,
+                  label: items[i].$3,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => onTap(i),
+                    child: Center(
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 220),
+                          transitionBuilder: (ch, an) => ScaleTransition(scale: an, child: ch),
+                          child: Icon(
+                            i == tab ? items[i].$2 : items[i].$1,
+                            key: ValueKey('$i-${i == tab}'),
+                            size: 23,
+                            color: i == tab ? a : Colors.white.withOpacity(0.62),
+                          ),
+                        ),
+                        AnimatedSize(
+                          duration: dur,
+                          curve: curve,
+                          child: i == tab
+                              ? Padding(
+                                  padding: const EdgeInsets.only(left: 8),
+                                  child: Text(items[i].$3,
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      overflow: TextOverflow.fade,
+                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF16161D))),
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                      ]),
+                    ),
+                  ),
+                ),
+              ),
+          ]),
+        ]);
+      }),
     );
   }
 }
