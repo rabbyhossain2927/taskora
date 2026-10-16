@@ -34,7 +34,7 @@ class Api {
     try {
       j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
     } catch (_) {
-      throw ApiError(r.statusCode, 'Server sent an unexpected reply (${r.statusCode}). Check Config.apiBase.');
+      throw ApiError(r.statusCode, r.statusCode == 404 ? 'This feature isn’t on the server yet. Please try again later.' : 'The server sent an unexpected reply (${r.statusCode}).');
     }
     // Token just expired: get a fresh one and try once more.
     if (r.statusCode == 401 && !retried) return post(file, body, retried: true);

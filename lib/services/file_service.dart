@@ -34,7 +34,7 @@ class FileService {
     try {
       j = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
     } catch (_) {
-      throw 'Upload failed (${res.statusCode}). Is the server updated?';
+      throw res.statusCode == 404 ? 'File uploads aren’t on the server yet. Please try again later.' : 'Upload failed (${res.statusCode}).';
     }
     if (res.statusCode != 200) throw (j['error'] ?? 'Upload failed (${res.statusCode})').toString();
     return Attachment(
