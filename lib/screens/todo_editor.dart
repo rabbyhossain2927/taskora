@@ -12,7 +12,8 @@ import 'focus_screen.dart';
 class TodoEditor extends StatefulWidget {
   final String? id;
   final String? projectId;
-  const TodoEditor({super.key, this.id, this.projectId});
+  final DateTime? deadline;
+  const TodoEditor({super.key, this.id, this.projectId, this.deadline});
   @override
   State<TodoEditor> createState() => _TodoEditorState();
 }
@@ -31,7 +32,7 @@ class _TodoEditorState extends State<TodoEditor> {
     isNew = existing == null;
     t = existing != null
         ? Todo.fromMap(existing.id, existing.toMap())
-        : Todo(id: newId(), projectId: widget.projectId, priority: Prefs.instance.defaultPriority, start: DateTime.now(), category: s.todoCats.first.key);
+        : Todo(id: newId(), projectId: widget.projectId, priority: Prefs.instance.defaultPriority, start: DateTime.now(), deadline: widget.deadline, category: s.todoCats.first.key);
     if (isNew) reminderMode = Prefs.instance.defaultReminder;
     if (!isNew && t.reminder != null) reminderMode = 'custom';
     title.text = t.title;
@@ -154,8 +155,16 @@ class _TodoEditorState extends State<TodoEditor> {
               const Label('Priority'),
               PriorityPicker(value: t.priority, onChanged: (v) => setState(() => t.priority = v)),
               Label('Category', trailing: Icon(iconOf('label'), size: 16, color: context.mutedText)),
-              TagPicker(tags: s.todoCats, value: t.category, onChanged: (v) => setState(() => t.category = v)),
-              Label('Sub-tasks', trailing: t.subtasks.isEmpty ? null : Text('$subDone/${t.subtasks.length}', style: TextStyle(fontWeight: FontWeight.w800, color: context.accent))),
+              TagPicker(
+                tags: s.todoCats,
+                value: t.category,
+                onChanged: (v) => setState(() => t.category = v),
+                onAdd: (name) async {
+                  final k = await addCategory(s, 'todoCats', name);
+                  setState(() => t.category = k);
+                },
+              ),
+              Label('Sub-tasks', trailing: t.subtasks.isEmpty ? null : Text('$subDone/${t.subtasks.length}', style: TextStyle(fontWeight: FontWeight.w700, color: context.accent))),
               Box(
                 padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
                 child: Column(children: [

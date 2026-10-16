@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -5,9 +6,12 @@ import '../icons.dart';
 import '../models.dart';
 import '../services/store.dart';
 import '../theme.dart';
+import '../screens/profile_screen.dart';
 
 extension Ctx on BuildContext {
   Color get accent => Theme.of(this).colorScheme.primary;
+  Color get tint => Theme.of(this).colorScheme.primaryContainer;
+  Color get onTint => Theme.of(this).colorScheme.onPrimaryContainer;
   Color get surface => Theme.of(this).colorScheme.surface;
   bool get isDark => Theme.of(this).brightness == Brightness.dark;
   Color get mutedText => isDark ? const Color(0xFFA3A3B2) : C.muted;
@@ -28,8 +32,11 @@ const currencySymbols = {
   'CAD': r'CA$', 'AUD': r'A$', 'JPY': '¥', 'CNY': 'CN¥', 'MYR': 'RM ', 'SGD': r'S$', 'TRY': '₺', 'NGN': '₦',
 };
 
-const priorityColors = [Color(0xFFD64545), Color(0xFFE08A1E), Color(0xFF2C6CB8), Color(0xFF8A8A99)];
-Color priorityColor(int p) => priorityColors[(p - 1).clamp(0, 3)];
+/// 1 Urgent · 2 High · 3 Medium · 4 Low · 5 None
+const priorityNames = ['Urgent', 'High', 'Medium', 'Low', 'None'];
+const priorityColors = [Color(0xFFE5484D), Color(0xFFF08C2E), Color(0xFF3E7BFA), Color(0xFF2EAD6B), Color(0xFF9A9AA8)];
+Color priorityColor(int p) => priorityColors[(p - 1).clamp(0, 4)];
+String priorityName(int p) => priorityNames[(p - 1).clamp(0, 4)];
 
 /// Rounded pastel square with an icon.
 class IconTile extends StatelessWidget {
@@ -85,7 +92,7 @@ class Header extends StatelessWidget {
             RoundButton(icon: Icons.arrow_back_ios_new_rounded, tooltip: 'Back', onTap: () => Navigator.maybePop(context)),
             const SizedBox(width: 12),
           ],
-          Expanded(child: Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800), overflow: TextOverflow.ellipsis)),
+          Expanded(child: Text(title, style: const TextStyle(fontSize: T.title, fontWeight: FontWeight.w700, letterSpacing: -0.3), overflow: TextOverflow.ellipsis)),
           ...actions.expand((a) => [const SizedBox(width: 8), a]),
         ]),
       );
@@ -116,7 +123,7 @@ class Label extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
         child: Row(children: [
-          Expanded(child: Text(text.toUpperCase(), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: context.mutedText))),
+          Expanded(child: Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.1, color: context.mutedText))),
           if (trailing != null) trailing!,
         ]),
       );
@@ -194,13 +201,35 @@ class TagPicker extends StatelessWidget {
   final List<Tag> tags;
   final String value;
   final ValueChanged<String> onChanged;
-  const TagPicker({super.key, required this.tags, required this.value, required this.onChanged});
+  /// When set, shows a "+ Other" chip that asks for a new name.
+  final Future<void> Function(String name)? onAdd;
+  const TagPicker({super.key, required this.tags, required this.value, required this.onChanged, this.onAdd});
   @override
   Widget build(BuildContext context) => Wrap(
         spacing: 8,
         runSpacing: 8,
-        children: [for (final t in tags) TagChip(t, selected: t.key == value, onTap: () => onChanged(t.key))],
+        children: [
+          for (final t in tags) TagChip(t, selected: t.key == value, onTap: () => onChanged(t.key)),
+          if (onAdd != null)
+            ActionChip(
+              avatar: Icon(Icons.add_rounded, size: 16, color: context.accent),
+              label: Text('Other', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.accent)),
+              onPressed: () async {
+                final name = await askText(context, title: 'New category', hint: 'e.g. Freelance');
+                if (name != null && name.isNotEmpty) await onAdd!(name);
+              },
+            ),
+        ],
       );
+}
+
+/// Adds a category to a list in the Store and returns its key.
+Future<String> addCategory(Store s, String field, String name) async {
+  final list = List<Tag>.of(field == 'projectCats' ? s.projectCats : s.todoCats);
+  final key = 'c${DateTime.now().millisecondsSinceEpoch}';
+  list.add(Tag(key, name, (list.length * 3) % pastels.length, 'label'));
+  await s.saveTaxonomy(field, list);
+  return key;
 }
 
 class PriorityPicker extends StatelessWidget {
@@ -208,32 +237,45 @@ class PriorityPicker extends StatelessWidget {
   final ValueChanged<int> onChanged;
   const PriorityPicker({super.key, required this.value, required this.onChanged});
   @override
-  Widget build(BuildContext context) => Row(
+  Widget build(BuildContext context) => Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
-          for (var p = 1; p <= 4; p++)
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(right: p < 4 ? 8 : 0),
-                child: Material(
-                  color: value == p ? priorityColor(p).withOpacity(0.14) : context.surface,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: value == p ? priorityColor(p) : (context.isDark ? Colors.white12 : C.line))),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: () => onChanged(p),
-                    child: SizedBox(
-                      height: 44,
-                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        Icon(Icons.flag_rounded, size: 16, color: priorityColor(p)),
-                        const SizedBox(width: 4),
-                        Text('P$p', style: TextStyle(fontWeight: FontWeight.w800, color: priorityColor(p))),
-                      ]),
-                    ),
-                  ),
+          for (var p = 1; p <= 5; p++)
+            Material(
+              color: value == p ? priorityColor(p).withOpacity(0.13) : context.surface,
+              shape: StadiumBorder(side: BorderSide(color: value == p ? priorityColor(p) : (context.isDark ? Colors.white12 : C.line))),
+              child: InkWell(
+                customBorder: const StadiumBorder(),
+                onTap: () => onChanged(p),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(p == 5 ? Icons.outlined_flag_rounded : Icons.flag_rounded, size: 15, color: priorityColor(p)),
+                    const SizedBox(width: 5),
+                    Text(priorityName(p), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: value == p ? priorityColor(p) : null)),
+                  ]),
                 ),
               ),
             ),
         ],
       );
+}
+
+/// Small coloured flag + name, e.g. "High".
+class PriorityBadge extends StatelessWidget {
+  final int p;
+  final bool showNone;
+  const PriorityBadge(this.p, {super.key, this.showNone = false});
+  @override
+  Widget build(BuildContext context) {
+    if (p >= 5 && !showNone) return const SizedBox.shrink();
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(p >= 5 ? Icons.outlined_flag_rounded : Icons.flag_rounded, size: 13, color: priorityColor(p)),
+      const SizedBox(width: 3),
+      Text(priorityName(p), style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: priorityColor(p))),
+    ]);
+  }
 }
 
 /// Segmented control.
@@ -544,4 +586,261 @@ class SoonPill extends StatelessWidget {
         decoration: BoxDecoration(color: C.amberBg, borderRadius: BorderRadius.circular(10)),
         child: const Text('Soon', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: C.amber)),
       );
+}
+
+
+// ---------------- avatar / profile ----------------
+
+class Avatar extends StatelessWidget {
+  final double size;
+  final bool ring;
+  const Avatar({super.key, this.size = 44, this.ring = true});
+  @override
+  Widget build(BuildContext context) {
+    final u = FirebaseAuth.instance.currentUser;
+    final name = (u?.displayName?.trim().isNotEmpty ?? false) ? u!.displayName! : (u?.email ?? 'You');
+    final initials = name.trim().split(RegExp(r'\s+')).take(2).map((w) => w.isEmpty ? '' : w[0].toUpperCase()).join();
+    final pic = u?.photoURL;
+    final inner = CircleAvatar(
+      radius: size / 2 - (ring ? size * 0.09 : 0),
+      backgroundColor: context.tint,
+      foregroundImage: pic != null ? NetworkImage(pic) : null,
+      child: Text(initials, style: TextStyle(fontWeight: FontWeight.w700, color: context.onTint, fontSize: size * 0.3)),
+    );
+    if (!ring) return inner;
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(size * 0.045),
+      decoration: BoxDecoration(shape: BoxShape.circle, gradient: SweepGradient(colors: [context.accent, context.accent.withOpacity(0.35), context.accent])),
+      child: Container(
+        padding: EdgeInsets.all(size * 0.04),
+        decoration: BoxDecoration(shape: BoxShape.circle, color: Theme.of(context).canvasColor),
+        child: inner,
+      ),
+    );
+  }
+}
+
+/// Round avatar that opens Profile. Shown at the top of every main page.
+class ProfileButton extends StatelessWidget {
+  final double size;
+  const ProfileButton({super.key, this.size = 40});
+  @override
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        label: 'Profile',
+        child: GestureDetector(
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
+          child: Avatar(size: size),
+        ),
+      );
+}
+
+/// Title row for the main tabs: big title, optional actions, profile avatar.
+class MainHeader extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final List<Widget> actions;
+  const MainHeader(this.title, {super.key, this.subtitle, this.actions = const []});
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
+        child: Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: const TextStyle(fontSize: T.display, fontWeight: FontWeight.w700, letterSpacing: -0.5)),
+              if (subtitle != null) Text(subtitle!, style: TextStyle(fontSize: T.small, color: context.mutedText)),
+            ]),
+          ),
+          ...actions.expand((a) => [a, const SizedBox(width: 8)]),
+          const ProfileButton(),
+        ]),
+      );
+}
+
+// ---------------- animation ----------------
+
+/// Fades and slides its child in once. Use `index` to stagger lists.
+class FadeIn extends StatelessWidget {
+  final Widget child;
+  final int index;
+  final double dy;
+  const FadeIn({super.key, required this.child, this.index = 0, this.dy = 14});
+  @override
+  Widget build(BuildContext context) {
+    final delay = (index.clamp(0, 10)) * 45;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 380 + delay),
+      curve: Interval(delay / (380 + delay), 1, curve: Curves.easeOutCubic),
+      builder: (_, v, c) => Opacity(opacity: v, child: Transform.translate(offset: Offset(0, (1 - v) * dy), child: c)),
+      child: child,
+    );
+  }
+}
+
+/// Progress ring that animates to its value.
+class AnimatedRing extends StatelessWidget {
+  final double value;
+  final double size;
+  final double stroke;
+  final Color color;
+  final Color track;
+  final Widget? center;
+  const AnimatedRing({super.key, required this.value, this.size = 72, this.stroke = 7, required this.color, required this.track, this.center});
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: size,
+        height: size,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: value.clamp(0.0, 1.0)),
+          duration: const Duration(milliseconds: 900),
+          curve: Curves.easeOutCubic,
+          builder: (_, v, __) => Stack(alignment: Alignment.center, children: [
+            SizedBox.expand(child: CircularProgressIndicator(value: v, strokeWidth: stroke, color: color, backgroundColor: track, strokeCap: StrokeCap.round)),
+            if (center != null) Padding(padding: EdgeInsets.all(stroke + 4), child: FittedBox(child: center)),
+          ]),
+        ),
+      );
+}
+
+/// Gently pulses (used for the greeting sun/moon).
+class Breathing extends StatefulWidget {
+  final Widget child;
+  const Breathing({super.key, required this.child});
+  @override
+  State<Breathing> createState() => _BreathingState();
+}
+
+class _BreathingState extends State<Breathing> with SingleTickerProviderStateMixin {
+  late final AnimationController c = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat(reverse: true);
+  @override
+  void dispose() {
+    c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: c,
+        builder: (_, child) => Transform.rotate(angle: (c.value - 0.5) * 0.18, child: Transform.scale(scale: 1 + c.value * 0.06, child: child)),
+        child: widget.child,
+      );
+}
+
+// ---------------- menus ----------------
+
+class ActionItem {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool danger;
+  const ActionItem(this.icon, this.label, this.onTap, {this.danger = false});
+}
+
+/// Long-press menu as a bottom sheet.
+Future<void> showActions(BuildContext context, {required String title, String? subtitle, required List<ActionItem> items}) =>
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: T.heading, fontWeight: FontWeight.w700)),
+                if (subtitle != null) Text(subtitle, style: TextStyle(fontSize: T.small, color: ctx.mutedText)),
+              ]),
+            ),
+            for (final it in items)
+              ListTile(
+                dense: true,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                leading: Icon(it.icon, color: it.danger ? C.red : ctx.accent, size: 21),
+                title: Text(it.label, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w500, color: it.danger ? C.red : null)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  it.onTap();
+                },
+              ),
+          ]),
+        ),
+      ),
+    );
+
+/// Pick one option from a list (bottom sheet). Returns the chosen value.
+Future<V?> pickOne<V>(BuildContext context, {required String title, required List<(V, String)> options, V? current, List<IconData>? icons}) =>
+    showModalBottomSheet<V>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.7),
+          child: ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), children: [
+            Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 8), child: Text(title, style: const TextStyle(fontSize: T.heading, fontWeight: FontWeight.w700))),
+            for (var i = 0; i < options.length; i++)
+              ListTile(
+                dense: true,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                selected: options[i].$1 == current,
+                selectedTileColor: ctx.tint,
+                leading: icons != null && i < icons.length ? Icon(icons[i], size: 20) : null,
+                title: Text(options[i].$2, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w500)),
+                trailing: options[i].$1 == current ? Icon(Icons.check_rounded, color: ctx.accent) : null,
+                onTap: () => Navigator.pop(ctx, options[i].$1),
+              ),
+          ]),
+        ),
+      ),
+    );
+
+/// A settings row whose value opens a dropdown menu.
+class DropdownTile<V> extends StatelessWidget {
+  final IconData? icon;
+  final int color;
+  final String title;
+  final String? subtitle;
+  final V value;
+  final List<(V, String)> options;
+  final ValueChanged<V> onChanged;
+  const DropdownTile({super.key, this.icon, this.color = 0, required this.title, this.subtitle, required this.value, required this.options, required this.onChanged});
+  @override
+  Widget build(BuildContext context) {
+    final label = options.where((o) => o.$1 == value).map((o) => o.$2).firstOrNull ?? options.first.$2;
+    return RowTile(
+      icon: icon,
+      color: color,
+      title: title,
+      subtitle: subtitle,
+      trailing: PopupMenuButton<V>(
+        initialValue: value,
+        onSelected: onChanged,
+        position: PopupMenuPosition.under,
+        itemBuilder: (_) => [for (final o in options) PopupMenuItem<V>(value: o.$1, height: 42, child: Text(o.$2, style: const TextStyle(fontSize: 14)))],
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 7, 8, 7),
+          decoration: BoxDecoration(color: context.tint, borderRadius: BorderRadius.circular(12)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.onTint)),
+            Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: context.onTint),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// Ask for a line of text.
+Future<String?> askText(BuildContext context, {required String title, String initial = '', String hint = ''}) {
+  final c = TextEditingController(text: initial);
+  return showDialog<String>(
+    context: context,
+    builder: (d) => AlertDialog(
+      title: Text(title, style: const TextStyle(fontSize: T.heading, fontWeight: FontWeight.w700)),
+      content: TextField(controller: c, autofocus: true, textCapitalization: TextCapitalization.sentences, decoration: InputDecoration(hintText: hint), onSubmitted: (v) => Navigator.pop(d, v.trim())),
+      actions: [TextButton(onPressed: () => Navigator.pop(d), child: const Text('Cancel')), TextButton(onPressed: () => Navigator.pop(d, c.text.trim()), child: const Text('Save'))],
+    ),
+  );
 }

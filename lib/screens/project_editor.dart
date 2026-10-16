@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../icons.dart';
 import '../models.dart';
+import '../services/file_service.dart';
 import '../services/prefs.dart';
 import '../services/store.dart';
 import '../theme.dart';
@@ -102,7 +103,7 @@ class _ProjectEditorState extends State<ProjectEditor> {
                       autofocus: isNew,
                       textCapitalization: TextCapitalization.words,
                       onChanged: (_) => setState(() {}),
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: C.ink),
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: C.ink),
                       decoration: const InputDecoration(hintText: 'Project name', border: InputBorder.none, enabledBorder: InputBorder.none, focusedBorder: InputBorder.none, filled: false),
                     ),
                   ),
@@ -111,10 +112,43 @@ class _ProjectEditorState extends State<ProjectEditor> {
               const SizedBox(height: 10),
               TextField(controller: desc, minLines: 2, maxLines: 5, textCapitalization: TextCapitalization.sentences, decoration: const InputDecoration(hintText: 'What is this project about? (optional)')),
 
-              Label('Colour', trailing: Text(c.name, style: TextStyle(color: c.fg, fontWeight: FontWeight.w800, fontSize: 12.5))),
+              Label('Colour', trailing: Text(c.name, style: TextStyle(color: c.fg, fontWeight: FontWeight.w700, fontSize: 12.5))),
               ColorDots(colors: [for (final x in pastels) x.bg], rings: [for (final x in pastels) x.fg], value: p.color, size: 32, onChanged: (i) => setState(() => p.color = i)),
               const Label('Icon'),
               IconQuickPick(value: p.icon, color: p.color, onChanged: (k) => setState(() => p.icon = k)),
+              const Label('Cover photo'),
+              Box(
+                padding: EdgeInsets.zero,
+                onTap: () async {
+                  try {
+                    final a = await FileService.pickAndUpload(imagesOnly: true);
+                    if (a != null) setState(() => p.cover = a);
+                  } catch (e) {
+                    if (context.mounted) toast(context, e.toString());
+                  }
+                },
+                child: p.cover != null
+                    ? Stack(children: [
+                        SizedBox(height: 120, width: double.infinity, child: Image.network(p.cover!.url, fit: BoxFit.cover)),
+                        Positioned(
+                          right: 8,
+                          top: 8,
+                          child: Material(
+                            color: Colors.black38,
+                            shape: const CircleBorder(),
+                            child: IconButton(tooltip: 'Remove', icon: const Icon(Icons.close_rounded, color: Colors.white, size: 18), onPressed: () => setState(() => p.cover = null)),
+                          ),
+                        ),
+                      ])
+                    : Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(children: [
+                          Icon(Icons.add_photo_alternate_outlined, color: context.accent),
+                          const SizedBox(width: 10),
+                          Text('Add a cover photo (optional)', style: TextStyle(color: context.mutedText)),
+                        ]),
+                      ),
+              ),
 
               // Money
               const Label('Money'),
@@ -147,7 +181,7 @@ class _ProjectEditorState extends State<ProjectEditor> {
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
                           onChanged: (_) => setState(() {}),
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                           decoration: InputDecoration(hintText: '0', prefixText: currencySymbols[p.currency]),
                         ),
                       ),
@@ -203,7 +237,15 @@ class _ProjectEditorState extends State<ProjectEditor> {
               const Label('Priority'),
               PriorityPicker(value: p.priority, onChanged: (v) => setState(() => p.priority = v)),
               Label('Category', trailing: _editLink(context, 'projectCats')),
-              TagPicker(tags: s.projectCats, value: p.category, onChanged: (v) => setState(() => p.category = v)),
+              TagPicker(
+                tags: s.projectCats,
+                value: p.category,
+                onChanged: (v) => setState(() => p.category = v),
+                onAdd: (name) async {
+                  final k = await addCategory(s, 'projectCats', name);
+                  setState(() => p.category = k);
+                },
+              ),
 
               if (isNew) ...[
                 const Label('Split into tasks'),
@@ -255,14 +297,14 @@ class _ProjectEditorState extends State<ProjectEditor> {
 
   Widget _editLink(BuildContext context, String field) => GestureDetector(
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TaxonomyScreen(initial: field))),
-        child: Text('Edit', style: TextStyle(color: context.accent, fontWeight: FontWeight.w800, fontSize: 13)),
+        child: Text('Edit', style: TextStyle(color: context.accent, fontWeight: FontWeight.w700, fontSize: 13)),
       );
 
   Widget _moneyLine(BuildContext context, String a, String b, {bool bold = false, Color? color}) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(children: [
-          Expanded(child: Text(a, style: TextStyle(color: bold ? null : context.mutedText, fontWeight: bold ? FontWeight.w800 : FontWeight.w600))),
-          Text(b, style: TextStyle(fontWeight: FontWeight.w800, fontSize: bold ? 18 : 14, color: color)),
+          Expanded(child: Text(a, style: TextStyle(color: bold ? null : context.mutedText, fontWeight: bold ? FontWeight.w700 : FontWeight.w600))),
+          Text(b, style: TextStyle(fontWeight: FontWeight.w700, fontSize: bold ? 18 : 14, color: color)),
         ]),
       );
 }

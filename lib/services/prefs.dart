@@ -22,6 +22,8 @@ class Prefs extends ChangeNotifier {
   // General
   int get themeIndex => _get('themeIndex', 0);
   set themeIndex(int v) => _set('themeIndex', v);
+  String get bgStyle => _get('bgStyle', 'glow');
+  set bgStyle(String v) => _set('bgStyle', v);
   String get themeMode => _get('themeMode', 'light'); // light | dark | system
   set themeMode(String v) => _set('themeMode', v);
   ThemeMode get mode => switch (themeMode) { 'dark' => ThemeMode.dark, 'system' => ThemeMode.system, _ => ThemeMode.light };
@@ -33,7 +35,7 @@ class Prefs extends ChangeNotifier {
   set haptics(bool v) => _set('haptics', v);
 
   // To-do
-  int get defaultPriority => _get('defaultPriority', 4);
+  int get defaultPriority => _get('defaultPriority', 5);
   set defaultPriority(int v) => _set('defaultPriority', v);
   bool get showCompleted => _get('showCompleted', true);
   set showCompleted(bool v) => _set('showCompleted', v);

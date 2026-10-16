@@ -66,12 +66,13 @@ class _StatsScreenState extends State<StatsScreen> {
     final byCat = [for (final c in s.todoCats) (c, done.where((t) => t.category == c.key && !t.completedAt!.isBefore(starts.first)).length)]..sort((a, b) => b.$2.compareTo(a.$2));
     final catTotal = byCat.fold<int>(0, (a, b) => a + b.$2);
 
-    return SafeArea(
-      bottom: false,
+    return Scaffold(
+      body: SafeArea(
       child: SyncRefresh(
-        child: ListView(padding: const EdgeInsets.fromLTRB(20, 12, 20, 120), children: [
-          const Text('Stats', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 12),
+        child: ListView(padding: const EdgeInsets.fromLTRB(0, 0, 0, 40), children: [
+          const Header('Stats'),
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const SizedBox(height: 4),
           Segmented<String>(items: const [('week', 'Week'), ('month', 'Month'), ('year', 'Year')], value: period, onChanged: (v) => setState(() => period = v)),
           const SizedBox(height: 12),
           Row(children: [
@@ -100,12 +101,12 @@ class _StatsScreenState extends State<StatsScreen> {
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text('You receive · ${e.key}', style: TextStyle(color: context.mutedText, fontWeight: FontWeight.w600, fontSize: 13)),
-                        Text(fmtMoney(e.value.$1, e.key), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: C.green)),
+                        Text(fmtMoney(e.value.$1, e.key), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: C.green)),
                       ]),
                     ),
                     Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                       Text('Platform fees', style: TextStyle(fontSize: 12, color: context.mutedText)),
-                      Text(fmtMoney(e.value.$2, e.key), style: const TextStyle(fontWeight: FontWeight.w800, color: C.red)),
+                      Text(fmtMoney(e.value.$2, e.key), style: const TextStyle(fontWeight: FontWeight.w700, color: C.red)),
                     ]),
                   ]),
                 ),
@@ -115,7 +116,19 @@ class _StatsScreenState extends State<StatsScreen> {
             const Label('Projects by status'),
             Box(
               child: Row(children: [
-                SizedBox(width: 120, height: 120, child: CustomPaint(painter: _Donut([for (final e in byStatus) (pastel(e.$1.color).fg, e.$2.toDouble())]), child: Center(child: Text('${s.projects.length}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800))))),
+                SizedBox(
+                  width: 120,
+                  height: 120,
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: 1),
+                    duration: const Duration(milliseconds: 900),
+                    curve: Curves.easeOutCubic,
+                    builder: (_, v, __) => CustomPaint(
+                      painter: _Donut([for (final e in byStatus) (pastel(e.$1.color).fg, e.$2.toDouble())], v),
+                      child: Center(child: Text('${s.projects.length}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700))),
+                    ),
+                  ),
+                ),
                 const SizedBox(width: 18),
                 Expanded(
                   child: Column(children: [
@@ -126,7 +139,7 @@ class _StatsScreenState extends State<StatsScreen> {
                           Container(width: 10, height: 10, decoration: BoxDecoration(color: pastel(e.$1.color).fg, shape: BoxShape.circle)),
                           const SizedBox(width: 8),
                           Expanded(child: Text(e.$1.label, style: const TextStyle(fontWeight: FontWeight.w600))),
-                          Text('${e.$2}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                          Text('${e.$2}', style: const TextStyle(fontWeight: FontWeight.w700)),
                         ]),
                       ),
                   ]),
@@ -149,7 +162,7 @@ class _StatsScreenState extends State<StatsScreen> {
                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                               Row(children: [
                                 Expanded(child: Text(e.$1.label, style: const TextStyle(fontWeight: FontWeight.w700))),
-                                Text('${(e.$2 * 100 / catTotal).round()}%', style: TextStyle(fontWeight: FontWeight.w800, color: pastel(e.$1.color).fg)),
+                                Text('${(e.$2 * 100 / catTotal).round()}%', style: TextStyle(fontWeight: FontWeight.w700, color: pastel(e.$1.color).fg)),
                               ]),
                               const SizedBox(height: 4),
                               ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: e.$2 / catTotal, minHeight: 6, color: pastel(e.$1.color).fg, backgroundColor: pastel(e.$1.color).bg)),
@@ -167,7 +180,9 @@ class _StatsScreenState extends State<StatsScreen> {
             const SizedBox(width: 10),
             _Kpi(value: '${s.notes.length}', label: 'Notes', icon: Icons.sticky_note_2_outlined, color: 6),
           ]),
+          ])),
         ]),
+      ),
       ),
     );
   }
@@ -187,7 +202,7 @@ class _Kpi extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Icon(icon, color: p.fg, size: 22),
           const SizedBox(height: 8),
-          Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+          Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
           Text(label, style: TextStyle(fontSize: 12, color: context.mutedText, fontWeight: FontWeight.w600)),
         ]),
       ),
@@ -209,13 +224,16 @@ class _Bars extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 3),
             child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-              Text(values[i] == 0 ? '' : '${values[i]}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: context.mutedText)),
+              Text(values[i] == 0 ? '' : '${values[i]}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: context.mutedText)),
               const SizedBox(height: 4),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                height: 6 + 110 * values[i] / maxV,
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: 6 + 110 * values[i] / maxV),
+                duration: Duration(milliseconds: 500 + i * 50),
+                curve: Curves.easeOutCubic,
+                builder: (_, h, __) => Container(
+                height: h,
                 decoration: BoxDecoration(color: i == values.length - 1 ? color : color.withOpacity(0.28), borderRadius: BorderRadius.circular(8)),
-              ),
+              )),
               const SizedBox(height: 6),
               Text(labels[i], style: TextStyle(fontSize: 11.5, color: context.mutedText, fontWeight: FontWeight.w700)),
             ]),
@@ -227,7 +245,8 @@ class _Bars extends StatelessWidget {
 
 class _Donut extends CustomPainter {
   final List<(Color, double)> parts;
-  _Donut(this.parts);
+  final double progress;
+  _Donut(this.parts, [this.progress = 1]);
   @override
   void paint(Canvas canvas, Size size) {
     final total = parts.fold<double>(0, (a, b) => a + b.$2);
@@ -235,7 +254,7 @@ class _Donut extends CustomPainter {
     final rect = Rect.fromCircle(center: size.center(Offset.zero), radius: size.shortestSide / 2 - 9);
     var start = -math.pi / 2;
     for (final p in parts) {
-      final sweep = 2 * math.pi * p.$2 / total;
+      final sweep = 2 * math.pi * p.$2 / total * progress;
       canvas.drawArc(rect, start + 0.04, math.max(0.0, sweep - 0.08), false, Paint()
         ..color = p.$1
         ..style = PaintingStyle.stroke

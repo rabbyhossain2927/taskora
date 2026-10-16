@@ -76,6 +76,8 @@ class Project {
   FeePlatform platform;
   double customFee;
   DateTime createdAt;
+  Attachment? cover;
+  List<Attachment> files;
 
   Project({
     required this.id,
@@ -95,7 +97,10 @@ class Project {
     this.platform = FeePlatform.direct,
     this.customFee = 15,
     DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
+    this.cover,
+    List<Attachment>? files,
+  })  : createdAt = createdAt ?? DateTime.now(),
+        files = files ?? [];
 
   double get fee => (amount ?? 0) * feePercent(platform, customFee) / 100;
   double get net => (amount ?? 0) - fee;
@@ -105,6 +110,8 @@ class Project {
         'priority': priority, 'category': category, 'start': _t(start), 'deadline': _t(deadline),
         'reminder': _t(reminder), 'done': done, 'amount': amount, 'currency': currency,
         'platform': platform.name, 'customFee': customFee, 'createdAt': _t(createdAt),
+        if (cover != null) 'cover': cover!.toMap(),
+        'files': files.map((f) => f.toMap()).toList(),
       };
 
   factory Project.fromMap(String id, Map<String, dynamic> m) => Project(
@@ -125,6 +132,8 @@ class Project {
         platform: FeePlatform.values.firstWhere((p) => p.name == m['platform'], orElse: () => FeePlatform.direct),
         customFee: ((m['customFee'] ?? 15) as num).toDouble(),
         createdAt: _d(m['createdAt']),
+        cover: Attachment.fromMap(m['cover']),
+        files: ((m['files'] ?? []) as List).map(Attachment.fromMap).whereType<Attachment>().toList(),
       );
 }
 
@@ -159,7 +168,7 @@ class Todo {
     this.start,
     this.deadline,
     this.reminder,
-    this.priority = 4,
+    this.priority = 5,
     this.category = 'work',
     this.done = false,
     List<SubTask>? subtasks,
@@ -182,7 +191,7 @@ class Todo {
         start: _d(m['start']),
         deadline: _d(m['deadline']),
         reminder: _d(m['reminder']),
-        priority: ((m['priority'] ?? 4) as num).toInt(),
+        priority: ((m['priority'] ?? 5) as num).toInt(),
         category: m['category'] ?? 'work',
         done: m['done'] ?? false,
         subtasks: ((m['subtasks'] ?? []) as List).map((e) => SubTask.fromMap(e as Map)).toList(),
@@ -192,20 +201,70 @@ class Todo {
 }
 
 /// A note is made of blocks: plain text, a checklist, or a collapsible dropdown.
+/// A file stored on your server (files.php).
+class Attachment {
+  final String id;
+  final String name;
+  final String mime;
+  final int size;
+  final String url;
+  const Attachment({required this.id, required this.name, required this.mime, required this.size, required this.url});
+  bool get isImage => mime.startsWith('image/');
+  bool get isPdf => mime == 'application/pdf' || name.toLowerCase().endsWith('.pdf');
+  String get sizeLabel => size < 1024 * 1024 ? '${(size / 1024).toStringAsFixed(0)} KB' : '${(size / 1048576).toStringAsFixed(1)} MB';
+  Map<String, dynamic> toMap() => {'id': id, 'name': name, 'mime': mime, 'size': size, 'url': url};
+  static Attachment? fromMap(dynamic m) {
+    if (m is! Map || m['id'] == null) return null;
+    return Attachment(id: m['id'].toString(), name: (m['name'] ?? 'file').toString(), mime: (m['mime'] ?? '').toString(), size: ((m['size'] ?? 0) as num).toInt(), url: (m['url'] ?? '').toString());
+  }
+}
+
+/// One piece of a note.
+/// type: text | bullets | check | dropdown | link | file
 class NoteBlock {
-  String type; // text | check | dropdown
-  String text; // text body, or dropdown title
+  String type;
+  String text; // text body, dropdown title, or link URL
   String body; // dropdown content
-  List<SubTask> items; // checklist items
+  List<SubTask> items; // checklist / bullet items
   bool open;
-  NoteBlock({this.type = 'text', this.text = '', this.body = '', List<SubTask>? items, this.open = true}) : items = items ?? [];
-  Map<String, dynamic> toMap() => {'type': type, 'text': text, 'body': body, 'items': items.map((i) => i.toMap()).toList(), 'open': open};
+  String size; // s | m | l | h (heading)
+  bool bold;
+  Attachment? file;
+  NoteBlock({this.type = 'text', this.text = '', this.body = '', List<SubTask>? items, this.open = true, this.size = 'm', this.bold = false, this.file})
+      : items = items ?? [];
+  Map<String, dynamic> toMap() => {
+        'type': type, 'text': text, 'body': body, 'items': items.map((i) => i.toMap()).toList(), 'open': open,
+        'size': size, 'bold': bold, if (file != null) 'file': file!.toMap(),
+      };
   factory NoteBlock.fromMap(Map m) => NoteBlock(
         type: m['type'] ?? 'text',
         text: m['text'] ?? '',
         body: m['body'] ?? '',
         items: ((m['items'] ?? []) as List).map((e) => SubTask.fromMap(e as Map)).toList(),
         open: m['open'] ?? true,
+        size: m['size'] ?? 'm',
+        bold: m['bold'] ?? false,
+        file: Attachment.fromMap(m['file']),
+      );
+  String get plain => switch (type) {
+        'bullets' || 'check' => items.map((i) => i.title).join(' '),
+        'dropdown' => '$text $body',
+        'file' => file?.name ?? '',
+        _ => text,
+      };
+}
+
+/// A note can have several tabs, like Google Docs.
+class NoteTab {
+  String id;
+  String title;
+  List<NoteBlock> blocks;
+  NoteTab({required this.id, this.title = 'Tab', List<NoteBlock>? blocks}) : blocks = blocks ?? [NoteBlock()];
+  Map<String, dynamic> toMap() => {'id': id, 'title': title, 'blocks': blocks.map((b) => b.toMap()).toList()};
+  factory NoteTab.fromMap(Map m) => NoteTab(
+        id: (m['id'] ?? DateTime.now().microsecondsSinceEpoch.toString()).toString(),
+        title: m['title'] ?? 'Tab',
+        blocks: ((m['blocks'] ?? []) as List).map((e) => NoteBlock.fromMap(e as Map)).toList(),
       );
 }
 
@@ -216,33 +275,46 @@ class Note {
   int color;
   String icon;
   List<String> tags;
-  List<NoteBlock> blocks;
+  List<NoteTab> tabs;
   bool pinned;
   DateTime updatedAt;
 
-  Note({required this.id, this.title = '', this.sectionId, this.color = 0, this.icon = 'note', List<String>? tags, List<NoteBlock>? blocks, this.pinned = false, DateTime? updatedAt})
+  Note({required this.id, this.title = '', this.sectionId, this.color = 0, this.icon = 'note', List<String>? tags, List<NoteTab>? tabs, this.pinned = false, DateTime? updatedAt})
       : tags = tags ?? [],
-        blocks = blocks ?? [NoteBlock()],
+        tabs = (tabs == null || tabs.isEmpty) ? [NoteTab(id: 't1', title: 'Main')] : tabs,
         updatedAt = updatedAt ?? DateTime.now();
 
+  /// Blocks of the first tab (cards and previews use these).
+  List<NoteBlock> get blocks => tabs.first.blocks;
+  List<NoteBlock> get allBlocks => [for (final t in tabs) ...t.blocks];
   String get preview => blocks.where((b) => b.type == 'text').map((b) => b.text).join(' ').trim();
+  String get allText => allBlocks.map((b) => b.plain).join(' ');
+  Attachment? get firstImage => allBlocks.map((b) => b.file).whereType<Attachment>().where((f) => f.isImage).firstOrNull;
 
   Map<String, dynamic> toMap() => {
         'title': title, 'sectionId': sectionId, 'color': color, 'icon': icon, 'tags': tags,
-        'blocks': blocks.map((b) => b.toMap()).toList(), 'pinned': pinned, 'updatedAt': _t(updatedAt),
+        'tabs': tabs.map((t) => t.toMap()).toList(), 'pinned': pinned, 'updatedAt': _t(updatedAt),
       };
 
-  factory Note.fromMap(String id, Map<String, dynamic> m) => Note(
-        id: id,
-        title: m['title'] ?? '',
-        sectionId: m['sectionId'],
-        color: ((m['color'] ?? 0) as num).toInt(),
-        icon: m['icon'] ?? 'note',
-        tags: List<String>.from(m['tags'] ?? const []),
-        blocks: ((m['blocks'] ?? []) as List).map((e) => NoteBlock.fromMap(e as Map)).toList(),
-        pinned: m['pinned'] ?? false,
-        updatedAt: _d(m['updatedAt']),
-      );
+  factory Note.fromMap(String id, Map<String, dynamic> m) {
+    var tabs = ((m['tabs'] ?? []) as List).map((e) => NoteTab.fromMap(e as Map)).toList();
+    if (tabs.isEmpty) {
+      // Notes made before tabs existed
+      final blocks = ((m['blocks'] ?? []) as List).map((e) => NoteBlock.fromMap(e as Map)).toList();
+      tabs = [NoteTab(id: 't1', title: 'Main', blocks: blocks.isEmpty ? null : blocks)];
+    }
+    return Note(
+      id: id,
+      title: m['title'] ?? '',
+      sectionId: m['sectionId'],
+      color: ((m['color'] ?? 0) as num).toInt(),
+      icon: m['icon'] ?? 'note',
+      tags: List<String>.from(m['tags'] ?? const []),
+      tabs: tabs,
+      pinned: m['pinned'] ?? false,
+      updatedAt: _d(m['updatedAt']),
+    );
+  }
 }
 
 class NoteSection {

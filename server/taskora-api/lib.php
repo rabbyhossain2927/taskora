@@ -187,7 +187,7 @@ function maybe_self_update(): void {
     $changed = [];
     foreach ($items as $it) {
         $name = (string) ($it['name'] ?? '');
-        if (($it['type'] ?? '') !== 'file' || $name === 'config.php' || !preg_match('/^[A-Za-z0-9._-]+$/', $name)) continue;
+        if (($it['type'] ?? '') !== 'file' || $name === 'config.php' || $name === 'install.php' || !preg_match('/^[A-Za-z0-9._-]+$/', $name)) continue;
         if (($shas[$name] ?? '') === ($it['sha'] ?? '') && is_file(__DIR__ . "/$name")) continue;
         $body = http_get((string) $it['download_url']);
         if ($body === null || $body === '') continue;

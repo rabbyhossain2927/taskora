@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -7,189 +8,399 @@ import '../services/prefs.dart';
 import '../services/store.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'calendar_screen.dart';
 import 'focus_screen.dart';
 import 'note_editor.dart';
 import 'notifications_screen.dart';
-import 'profile_screen.dart';
 import 'project_detail.dart';
+import 'project_editor.dart';
+import 'search_screen.dart';
 import 'shell.dart';
+import 'stats_screen.dart';
+import 'todo_editor.dart';
 import 'todos_screen.dart';
-
-class Avatar extends StatelessWidget {
-  final double size;
-  final bool ring;
-  const Avatar({super.key, this.size = 46, this.ring = true});
-  @override
-  Widget build(BuildContext context) {
-    final u = FirebaseAuth.instance.currentUser;
-    final name = (u?.displayName?.trim().isNotEmpty ?? false) ? u!.displayName! : (u?.email ?? 'You');
-    final initials = name.trim().split(RegExp(r'\s+')).take(2).map((w) => w.isEmpty ? '' : w[0].toUpperCase()).join();
-    final pic = u?.photoURL;
-    return Container(
-      padding: EdgeInsets.all(ring ? size * 0.05 : 0),
-      decoration: ring ? BoxDecoration(shape: BoxShape.circle, border: Border.all(color: context.accent, width: size * 0.05)) : null,
-      child: Container(
-        padding: EdgeInsets.all(ring ? size * 0.03 : 0),
-        decoration: BoxDecoration(shape: BoxShape.circle, color: Theme.of(context).scaffoldBackgroundColor),
-        child: CircleAvatar(
-          radius: size / 2 - (ring ? size * 0.08 : 0),
-          backgroundColor: const Color(0xFFE6DEFF),
-          foregroundImage: pic != null ? NetworkImage(pic) : null,
-          child: Text(initials, style: TextStyle(fontWeight: FontWeight.w800, color: const Color(0xFF5B3FD0), fontSize: size * 0.32)),
-        ),
-      ),
-    );
-  }
-}
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  String _greeting() {
+  (String, IconData, Color) _greeting() {
     final h = DateTime.now().hour;
-    return h < 12 ? 'Good morning' : (h < 17 ? 'Good afternoon' : 'Good evening');
+    if (h < 5) return ('Good night', Icons.nightlight_round, const Color(0xFF6C6FD8));
+    if (h < 12) return ('Good morning', Icons.wb_sunny_rounded, const Color(0xFFF5A524));
+    if (h < 17) return ('Good afternoon', Icons.wb_twilight_rounded, const Color(0xFFF08C2E));
+    if (h < 21) return ('Good evening', Icons.nights_stay_rounded, const Color(0xFF7A5AF8));
+    return ('Good night', Icons.nightlight_round, const Color(0xFF6C6FD8));
   }
+
+  void _open(BuildContext context, Widget page, {bool modal = false}) =>
+      Navigator.push(context, MaterialPageRoute(builder: (_) => page, fullscreenDialog: modal));
 
   @override
   Widget build(BuildContext context) {
     final s = context.watch<Store>();
     final prefs = context.watch<Prefs>();
     final u = FirebaseAuth.instance.currentUser;
-    final first = (u?.displayName ?? '').split(' ').first;
+    final first = (u?.displayName ?? '').trim().split(' ').first;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    bool isToday(DateTime? d) => d != null && DateTime(d.year, d.month, d.day) == today;
-    final dueToday = s.todos.where((t) => !t.done && (isToday(t.deadline) || (t.deadline != null && t.deadline!.isBefore(today)))).toList();
+    final in7 = today.add(const Duration(days: 8));
+    DateTime day(DateTime d) => DateTime(d.year, d.month, d.day);
+    bool isToday(DateTime? d) => d != null && day(d) == today;
+    final dueToday = s.todos.where((t) => !t.done && t.deadline != null && !day(t.deadline!).isAfter(today)).toList();
     final doneToday = s.todos.where((t) => t.done && isToday(t.completedAt)).length;
+    final upcoming = s.todos.where((t) => !t.done && t.deadline != null && day(t.deadline!).isAfter(today) && t.deadline!.isBefore(in7)).toList();
     final active = s.projects.where((p) => !p.done && p.status != 'complete' && p.status != 'cancelled').toList();
     final homeSections = s.sections.where((x) => x.onHome).toList();
     final total = dueToday.length + doneToday;
+    final g = _greeting();
+    var i = 0;
 
     return SafeArea(
       bottom: false,
       child: SyncRefresh(
-        child: ListView(padding: const EdgeInsets.fromLTRB(20, 12, 20, 120), children: [
-          Row(children: [
-            GestureDetector(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())), child: const Avatar()),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(_greeting(), style: TextStyle(color: context.mutedText, fontSize: 13.5, fontWeight: FontWeight.w600)),
-                Text(first.isEmpty ? 'Welcome' : first, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800)),
-              ]),
-            ),
-            Badge(
-              isLabelVisible: s.unreadCount > 0,
-              label: Text('${s.unreadCount}'),
-              backgroundColor: C.red,
-              child: RoundButton(icon: Icons.notifications_none_rounded, tooltip: 'Notifications', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()))),
-            ),
-          ]),
-          const SizedBox(height: 18),
-
-          // Today card
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: context.accent, borderRadius: BorderRadius.circular(28)),
+        child: ListView(padding: const EdgeInsets.fromLTRB(20, 10, 20, 120), children: [
+          // ---------- greeting ----------
+          FadeIn(
+            index: i++,
             child: Row(children: [
+              Breathing(
+                child: Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(color: g.$3.withOpacity(0.15), shape: BoxShape.circle),
+                  child: Icon(g.$2, color: g.$3, size: 26),
+                ),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(dLong.format(now), style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Text(total == 0 ? 'A clear day' : '$doneToday of $total done today', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 4),
-                  Text('${active.length} active projects · ${s.notes.length} notes', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  Text(g.$1, style: TextStyle(color: context.mutedText, fontSize: T.small, fontWeight: FontWeight.w500)),
+                  Text(first.isEmpty ? 'Welcome' : first, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.2)),
                 ]),
               ),
-              SizedBox(
-                width: 64,
-                height: 64,
-                child: Stack(alignment: Alignment.center, children: [
-                  CircularProgressIndicator(value: total == 0 ? 1 : doneToday / total, strokeWidth: 7, backgroundColor: Colors.white24, color: Colors.white, strokeCap: StrokeCap.round),
-                  Text(total == 0 ? '✓' : '${(doneToday * 100 / total).round()}%', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
-                ]),
+              RoundButton(icon: Icons.calendar_month_outlined, tooltip: 'Calendar', onTap: () => _open(context, const CalendarScreen())),
+              const SizedBox(width: 8),
+              Badge(
+                isLabelVisible: s.unreadCount > 0,
+                label: Text('${s.unreadCount}'),
+                backgroundColor: C.red,
+                child: RoundButton(icon: Icons.notifications_none_rounded, tooltip: 'Notifications', onTap: () => _open(context, const NotificationsScreen())),
               ),
+              const SizedBox(width: 8),
+              const ProfileButton(),
+            ]),
+          ),
+          const SizedBox(height: 14),
+
+          // ---------- search ----------
+          FadeIn(
+            index: i++,
+            child: Material(
+              color: context.surface,
+              borderRadius: BorderRadius.circular(16),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () => _open(context, const SearchScreen()),
+                child: Container(
+                  height: 48,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: context.isDark ? Colors.white10 : C.line)),
+                  child: Row(children: [
+                    Icon(Icons.search_rounded, color: context.mutedText, size: 21),
+                    const SizedBox(width: 10),
+                    Text('Search projects, to-dos, notes…', style: TextStyle(color: context.mutedText, fontSize: T.body)),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // ---------- today ----------
+          FadeIn(index: i++, child: _TodayCard(total: total, done: doneToday, due: dueToday.length, active: active.length, notes: s.notes.length)),
+          const SizedBox(height: 12),
+
+          // ---------- quick actions ----------
+          FadeIn(
+            index: i++,
+            child: Row(children: [
+              _Quick(icon: Icons.add_task_rounded, label: 'To-do', color: 8, onTap: () => _open(context, const TodoEditor(), modal: true)),
+              _Quick(icon: Icons.create_new_folder_outlined, label: 'Project', color: 0, onTap: () => _open(context, const ProjectEditor(), modal: true)),
+              _Quick(icon: Icons.note_add_outlined, label: 'Note', color: 6, onTap: () => _open(context, const NoteEditor(), modal: true)),
+              _Quick(icon: Icons.event_note_outlined, label: 'Calendar', color: 12, onTap: () => _open(context, const CalendarScreen())),
             ]),
           ),
           const SizedBox(height: 12),
 
-          // Overview tiles
-          Row(children: [
-            _Overview(icon: Icons.work_outline, color: 0, value: '${active.length}', label: 'Projects', onTap: () => ShellState.of(context)?.go(1)),
-            const SizedBox(width: 10),
-            _Overview(icon: Icons.check_circle_outline, color: 8, value: '${s.todos.where((t) => !t.done).length}', label: 'Open to-dos', onTap: () => ShellState.of(context)?.go(3)),
-            const SizedBox(width: 10),
-            _Overview(icon: Icons.sticky_note_2_outlined, color: 6, value: '${s.notes.length}', label: 'Notes', onTap: () => ShellState.of(context)?.go(4)),
-          ]),
+          // ---------- stats + focus ----------
+          FadeIn(
+            index: i++,
+            child: IntrinsicHeight(
+              child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Expanded(child: _StatsTile(store: s, onTap: () => _open(context, const StatsScreen()))),
+                const SizedBox(width: 12),
+                Expanded(child: _FocusTile(minutes: prefs.focusMinutes, onTap: () => _open(context, const FocusScreen()))),
+              ]),
+            ),
+          ),
 
-          Label('Due today', trailing: GestureDetector(onTap: () => ShellState.of(context)?.go(3), child: Text('See all', style: TextStyle(color: context.accent, fontWeight: FontWeight.w800, fontSize: 13)))),
-          if (dueToday.isEmpty)
-            Box(child: Row(children: [const Icon(Icons.celebration_outlined, color: C.green), const SizedBox(width: 10), Expanded(child: Text('Nothing due. Enjoy the calm!', style: TextStyle(color: context.mutedText)))]))
-          else
-            Box(padding: const EdgeInsets.symmetric(vertical: 4), child: Column(children: [for (final t in dueToday.take(5)) TodoRow(todo: t, dense: true)])),
+          // ---------- due today ----------
+          FadeIn(
+            index: i++,
+            child: Label('Due today${dueToday.isEmpty ? '' : ' · ${dueToday.length}'}',
+                trailing: _SeeAll(onTap: () => ShellState.of(context)?.go(2))),
+          ),
+          FadeIn(
+            index: i++,
+            child: dueToday.isEmpty
+                ? Box(
+                    padding: const EdgeInsets.all(18),
+                    child: Row(children: [
+                      Container(width: 40, height: 40, decoration: BoxDecoration(color: C.greenBg, borderRadius: BorderRadius.circular(13)), child: const Icon(Icons.celebration_outlined, color: C.green, size: 21)),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text('Nothing due. Enjoy the calm!', style: TextStyle(color: context.mutedText))),
+                    ]),
+                  )
+                : Box(
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+                    child: Column(children: [for (final t in dueToday.take(6)) TodoRow(todo: t)]),
+                  ),
+          ),
 
-          if (active.isNotEmpty) ...[
-            Label('Active projects', trailing: GestureDetector(onTap: () => ShellState.of(context)?.go(1), child: Text('See all', style: TextStyle(color: context.accent, fontWeight: FontWeight.w800, fontSize: 13)))),
-            SizedBox(
-              height: 150,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: active.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 10),
-                itemBuilder: (_, i) => _ProjectMini(p: active[i]),
+          // ---------- upcoming ----------
+          if (upcoming.isNotEmpty) ...[
+            FadeIn(index: i++, child: Label('Next 7 days · ${upcoming.length}', trailing: _SeeAll(onTap: () => _open(context, const CalendarScreen())))),
+            FadeIn(
+              index: i++,
+              child: Box(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+                child: Column(children: [for (final t in upcoming.take(5)) TodoRow(todo: t)]),
               ),
             ),
           ],
 
-          if (prefs.showNotesOnHome && homeSections.isNotEmpty) ...[
-            const Label('From your notes'),
-            for (final sec in homeSections) _HomeSection(sec: sec),
+          // ---------- projects ----------
+          if (active.isNotEmpty) ...[
+            FadeIn(index: i++, child: Label('Active projects', trailing: _SeeAll(onTap: () => ShellState.of(context)?.go(1)))),
+            FadeIn(
+              index: i++,
+              child: SizedBox(
+                height: 154,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  clipBehavior: Clip.none,
+                  itemCount: active.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (_, k) => _ProjectMini(p: active[k]),
+                ),
+              ),
+            ),
           ],
 
-          const SizedBox(height: 14),
-          Box(
-            color: const Color(0xFF1A1A1F),
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FocusScreen())),
-            child: Row(children: [
-              Container(width: 44, height: 44, decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(14)), child: const Icon(Icons.timer_outlined, color: Colors.white)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Start a focus session', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
-                  Text('${prefs.focusMinutes} minutes, no distractions', style: const TextStyle(color: Colors.white60, fontSize: 13)),
-                ]),
-              ),
-              const Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 34),
-            ]),
-          ),
-          const SizedBox(height: 10),
-          Center(child: TextButton.icon(onPressed: () => ShellState.of(context)?.go(2), icon: const Icon(Icons.insights_rounded, size: 18), label: const Text('See all your stats'))),
+          // ---------- notes ----------
+          if (prefs.showNotesOnHome && homeSections.isNotEmpty) ...[
+            FadeIn(index: i++, child: const Label('From your notes')),
+            for (final sec in homeSections) FadeIn(index: i++, child: _HomeSection(sec: sec)),
+          ],
         ]),
       ),
     );
   }
 }
 
-class _Overview extends StatelessWidget {
-  final IconData icon;
-  final int color;
-  final String value;
-  final String label;
+class _SeeAll extends StatelessWidget {
   final VoidCallback onTap;
-  const _Overview({required this.icon, required this.color, required this.value, required this.label, required this.onTap});
+  const _SeeAll({required this.onTap});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Text('See all', style: TextStyle(color: context.accent, fontWeight: FontWeight.w600, fontSize: 13)),
+      );
+}
+
+class _TodayCard extends StatelessWidget {
+  final int total, done, due, active, notes;
+  const _TodayCard({required this.total, required this.done, required this.due, required this.active, required this.notes});
+  @override
+  Widget build(BuildContext context) {
+    final a = context.accent;
+    final clear = total == 0;
+    final pct = clear ? 1.0 : done / total;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 18, 18, 18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color.lerp(a, Colors.white, 0.12)!, Color.lerp(a, Colors.black, 0.12)!]),
+        boxShadow: [BoxShadow(color: a.withOpacity(0.30), blurRadius: 22, offset: const Offset(0, 10))],
+      ),
+      child: Stack(clipBehavior: Clip.none, children: [
+        Positioned(right: -30, top: -40, child: Container(width: 120, height: 120, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(0.07)))),
+        Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(dLong.format(DateTime.now()), style: const TextStyle(color: Colors.white70, fontSize: T.small, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 4),
+              Text(clear ? 'A clear day' : (due == 0 ? 'All done for today' : '$due left today'),
+                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
+              const SizedBox(height: 4),
+              Text(clear ? 'Nothing due. Plan something or take it easy.' : '$done of $total finished',
+                  style: const TextStyle(color: Colors.white70, fontSize: T.small)),
+              const SizedBox(height: 12),
+              Wrap(spacing: 6, runSpacing: 6, children: [
+                _Pill(icon: Icons.work_outline_rounded, text: '$active projects'),
+                _Pill(icon: Icons.sticky_note_2_outlined, text: '$notes notes'),
+              ]),
+            ]),
+          ),
+          const SizedBox(width: 12),
+          AnimatedRing(
+            value: pct,
+            size: 84,
+            stroke: 8,
+            color: Colors.white,
+            track: Colors.white24,
+            center: clear
+                ? const Icon(Icons.check_rounded, color: Colors.white, size: 30)
+                : Text('${(pct * 100).round()}%', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
+          ),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _Pill({required this.icon, required this.text});
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        decoration: BoxDecoration(color: Colors.white.withOpacity(0.16), borderRadius: BorderRadius.circular(10)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 13, color: Colors.white),
+          const SizedBox(width: 4),
+          Text(text, style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w500)),
+        ]),
+      );
+}
+
+class _Quick extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final int color;
+  final VoidCallback onTap;
+  const _Quick({required this.icon, required this.label, required this.color, required this.onTap});
   @override
   Widget build(BuildContext context) {
     final p = pastel(color);
     return Expanded(
-      child: Box(
-        onTap: onTap,
-        padding: const EdgeInsets.all(14),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Container(width: 34, height: 34, decoration: BoxDecoration(color: p.bg, borderRadius: BorderRadius.circular(11)), child: Icon(icon, size: 18, color: p.fg)),
-          const SizedBox(height: 10),
-          Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-          Text(label, style: TextStyle(fontSize: 12, color: context.mutedText, fontWeight: FontWeight.w600)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Box(
+          onTap: onTap,
+          radius: 18,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Column(children: [
+            Container(width: 36, height: 36, decoration: BoxDecoration(color: context.isDark ? p.fg.withOpacity(0.22) : p.bg, borderRadius: BorderRadius.circular(12)), child: Icon(icon, size: 19, color: context.isDark ? p.bg : p.fg)),
+            const SizedBox(height: 6),
+            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatsTile extends StatelessWidget {
+  final Store store;
+  final VoidCallback onTap;
+  const _StatsTile({required this.store, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final counts = [
+      for (var d = 6; d >= 0; d--)
+        store.todos.where((t) => t.done && t.completedAt != null && DateTime(t.completedAt!.year, t.completedAt!.month, t.completedAt!.day) == today.subtract(Duration(days: d))).length
+    ];
+    final maxV = math.max(1, counts.fold<int>(0, math.max));
+    final week = counts.fold<int>(0, (a, b) => a + b);
+    return Box(
+      onTap: onTap,
+      padding: const EdgeInsets.all(14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.insights_rounded, size: 18, color: context.accent),
+          const SizedBox(width: 6),
+          const Expanded(child: Text('Stats', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14))),
+          Icon(Icons.chevron_right_rounded, size: 18, color: context.mutedText),
         ]),
+        const SizedBox(height: 4),
+        Text('$week done this week', style: TextStyle(fontSize: 11.5, color: context.mutedText)),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 38,
+          child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            for (var k = 0; k < counts.length; k++)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: 4 + 34 * counts[k] / maxV),
+                    duration: Duration(milliseconds: 500 + k * 60),
+                    curve: Curves.easeOutCubic,
+                    builder: (_, h, __) => Container(height: h, decoration: BoxDecoration(color: k == 6 ? context.accent : context.accent.withOpacity(0.25), borderRadius: BorderRadius.circular(4))),
+                  ),
+                ),
+              ),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+class _FocusTile extends StatelessWidget {
+  final int minutes;
+  final VoidCallback onTap;
+  const _FocusTile({required this.minutes, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    final a = context.accent;
+    return Material(
+      borderRadius: BorderRadius.circular(22),
+      clipBehavior: Clip.antiAlias,
+      child: Ink(
+        decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [context.tint, Color.lerp(context.tint, a, 0.25)!])),
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(Icons.timer_outlined, size: 18, color: context.onTint),
+                const SizedBox(width: 6),
+                Expanded(child: Text('Focus', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: context.onTint))),
+              ]),
+              const SizedBox(height: 4),
+              Text('$minutes min · no distractions', style: TextStyle(fontSize: 11.5, color: context.onTint.withOpacity(0.75))),
+              const Spacer(),
+              const SizedBox(height: 8),
+              Row(children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(color: a, borderRadius: BorderRadius.circular(12)),
+                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.play_arrow_rounded, color: Colors.white, size: 16),
+                    SizedBox(width: 4),
+                    Text('Start', style: TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              ]),
+            ]),
+          ),
+        ),
       ),
     );
   }
@@ -204,22 +415,27 @@ class _ProjectMini extends StatelessWidget {
     final pr = s.progressOf(p.id);
     final c = pastel(p.color);
     return SizedBox(
-      width: 200,
+      width: 196,
       child: Box(
-        color: c.bg,
+        color: context.isDark ? c.fg.withOpacity(0.22) : c.bg,
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProjectDetail(id: p.id))),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Container(width: 36, height: 36, decoration: BoxDecoration(color: Colors.white70, borderRadius: BorderRadius.circular(12)), child: Icon(iconOf(p.icon), color: c.fg, size: 19)),
+            Container(width: 34, height: 34, decoration: BoxDecoration(color: Colors.white.withOpacity(0.75), borderRadius: BorderRadius.circular(11)), child: Icon(iconOf(p.icon), color: c.fg, size: 18)),
             const Spacer(),
-            if (p.deadline != null) Text(dShort.format(p.deadline!), style: TextStyle(color: c.fg, fontWeight: FontWeight.w700, fontSize: 12)),
+            if (p.deadline != null) Text(dShort.format(p.deadline!), style: TextStyle(color: context.isDark ? Colors.white70 : c.fg, fontWeight: FontWeight.w600, fontSize: 11.5)),
           ]),
           const Spacer(),
-          Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: C.ink)),
+          Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5, color: context.isDark ? Colors.white : C.ink)),
           const SizedBox(height: 8),
-          ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: pr, minHeight: 6, color: c.fg, backgroundColor: Colors.white70)),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: pr),
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeOutCubic,
+            builder: (_, v, __) => ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: v, minHeight: 6, color: c.fg, backgroundColor: Colors.white70)),
+          ),
           const SizedBox(height: 4),
-          Text('${(pr * 100).round()}% done', style: TextStyle(color: c.fg, fontSize: 12, fontWeight: FontWeight.w700)),
+          Text('${(pr * 100).round()}% done', style: TextStyle(color: context.isDark ? Colors.white70 : c.fg, fontSize: 11.5, fontWeight: FontWeight.w600)),
         ]),
       ),
     );
@@ -237,18 +453,22 @@ class _HomeSection extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 10),
       child: Box(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(sec.title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+          Row(children: [
+            Icon(Icons.folder_rounded, size: 18, color: context.accent),
+            const SizedBox(width: 6),
+            Text(sec.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
+          ]),
           const SizedBox(height: 6),
-          if (notes.isEmpty) Text('No notes in this section yet.', style: TextStyle(color: context.mutedText, fontSize: 13)),
+          if (notes.isEmpty) Text('No notes in this folder yet.', style: TextStyle(color: context.mutedText, fontSize: 13)),
           for (final n in notes)
             InkWell(
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditor(id: n.id))),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 7),
                 child: Row(children: [
-                  Container(width: 10, height: 10, decoration: BoxDecoration(color: noteColor(n.color) == Colors.white ? C.line : noteColor(n.color), shape: BoxShape.circle, border: Border.all(color: C.line))),
+                  Icon(iconOf(n.icon), size: 16, color: context.mutedText),
                   const SizedBox(width: 10),
-                  Expanded(child: Text(n.title.isEmpty ? 'Untitled' : n.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600))),
+                  Expanded(child: Text(n.title.isEmpty ? 'Untitled' : n.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500))),
                   Text(dShort.format(n.updatedAt), style: TextStyle(color: context.mutedText, fontSize: 12)),
                 ]),
               ),

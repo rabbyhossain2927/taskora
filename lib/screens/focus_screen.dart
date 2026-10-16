@@ -75,9 +75,13 @@ class _FocusScreenState extends State<FocusScreen> {
     final s = context.watch<Store>();
     final t = widget.todoId == null ? null : s.todos.where((x) => x.id == widget.todoId).firstOrNull;
     final mm = (left ~/ 60).toString().padLeft(2, '0'), ss = (left % 60).toString().padLeft(2, '0');
+    final a = context.accent;
     return Scaffold(
-      backgroundColor: const Color(0xFF15151B),
-      body: SafeArea(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color.lerp(a, Colors.black, 0.05)!, Color.lerp(a, Colors.black, 0.45)!]),
+        ),
+        child: SafeArea(
         child: Column(children: [
           Theme(
             data: Theme.of(context).copyWith(textTheme: Theme.of(context).textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white)),
@@ -93,8 +97,8 @@ class _FocusScreenState extends State<FocusScreen> {
             width: 260,
             height: 260,
             child: Stack(alignment: Alignment.center, children: [
-              SizedBox.expand(child: CircularProgressIndicator(value: total == 0 ? 0 : left / total, strokeWidth: 12, color: context.accent, backgroundColor: Colors.white10, strokeCap: StrokeCap.round)),
-              Text('$mm:$ss', style: const TextStyle(color: Colors.white, fontSize: 56, fontWeight: FontWeight.w800, fontFeatures: [FontFeature.tabularFigures()])),
+              SizedBox.expand(child: CircularProgressIndicator(value: total == 0 ? 0 : left / total, strokeWidth: 12, color: Colors.white, backgroundColor: Colors.white24, strokeCap: StrokeCap.round)),
+              Text('$mm:$ss', style: const TextStyle(color: Colors.white, fontSize: 56, fontWeight: FontWeight.w700, fontFeatures: [FontFeature.tabularFigures()])),
             ]),
           ),
           const SizedBox(height: 30),
@@ -130,6 +134,7 @@ class _FocusScreenState extends State<FocusScreen> {
               const SizedBox(width: 16),
               Expanded(
                 child: FilledButton.icon(
+                  style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: context.accent),
                   onPressed: _toggle,
                   icon: Icon(running ? Icons.pause_rounded : Icons.play_arrow_rounded),
                   label: Text(running ? 'Pause' : (left == total ? 'Start' : 'Resume')),
@@ -138,6 +143,7 @@ class _FocusScreenState extends State<FocusScreen> {
             ]),
           ),
         ]),
+      ),
       ),
     );
   }

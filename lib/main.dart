@@ -57,16 +57,21 @@ class TaskOraApp extends StatelessWidget {
       title: 'TaskOra',
       debugShowCheckedModeBanner: false,
       navigatorKey: NotifyService.navigatorKey,
-      theme: buildTheme(t, Brightness.light),
-      darkTheme: buildTheme(t, Brightness.dark),
+      theme: buildTheme(t, Brightness.light, bgStyle: prefs.bgStyle),
+      darkTheme: buildTheme(t, Brightness.dark, bgStyle: prefs.bgStyle),
       themeMode: prefs.mode,
-      builder: (context, child) => user == null
-          ? child!
-          : ChangeNotifierProvider<Store>(
-              key: ValueKey(user.uid),
-              create: (_) => Store(user.uid),
-              child: child!,
-            ),
+      builder: (context, child) {
+        // Archivo is a wide font: show all text a little smaller.
+        final mq = MediaQuery.of(context);
+        final scaled = MediaQuery(data: mq.copyWith(textScaler: TextScaler.linear((mq.textScaler.scale(14) / 14) * 0.94)), child: child!);
+        return user == null
+            ? scaled
+            : ChangeNotifierProvider<Store>(
+                key: ValueKey(user.uid),
+                create: (_) => Store(user.uid),
+                child: scaled,
+              );
+      },
       home: const AuthGate(),
     );
   }
