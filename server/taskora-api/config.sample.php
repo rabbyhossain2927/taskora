@@ -14,4 +14,11 @@ return [
     'max_changes_per_request' => 500,
     'max_doc_bytes' => 1000000, // 1 MB per item
     'page_size' => 1000,
+
+    // Feedback emails go here
+    'feedback_to' => 'contact@rabbyhossain.com',
+
+    // Keep this server folder updated from GitHub automatically
+    'auto_update' => true,
+    'update_repo' => 'rabbyhossain2927/taskora',
 ];

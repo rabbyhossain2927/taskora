@@ -4,7 +4,7 @@ RewriteCond %{HTTP:Authorization} .
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
 # Keep secrets and helper files private
-<FilesMatch "^(config\.php|config\.sample\.php|lib\.php|schema\.sql)$">
+<FilesMatch "^(config\.php|config\.sample\.php|lib\.php|schema\.sql|\.user\.ini)$">
   Require all denied
 </FilesMatch>
 Options -Indexes

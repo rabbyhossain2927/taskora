@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 if (basename($_SERVER['SCRIPT_FILENAME'] ?? '') === 'lib.php') { http_response_code(404); exit; }
 
-header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: no-store');
+const SERVER_VERSION = '1.1.0';
+
+if (!defined('NO_JSON_HEADER')) {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+}
 
 function cfg(string $key) {
     static $c = null;
@@ -20,6 +24,8 @@ function cfg(string $key) {
 function reply(int $status, array $body): void {
     http_response_code($status);
     echo json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    // Send the reply now; anything registered with register_shutdown_function runs after.
+    if (function_exists('fastcgi_finish_request')) @fastcgi_finish_request();
     exit;
 }
 
@@ -68,13 +74,13 @@ function b64url_decode(string $s): string {
 function http_get(string $url): ?string {
     if (function_exists('curl_init')) {
         $ch = curl_init($url);
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10, CURLOPT_FOLLOWLOCATION => true]);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_FOLLOWLOCATION => true, CURLOPT_USERAGENT => 'TaskOra-API']);
         $body = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         return ($body !== false && $code === 200) ? $body : null;
     }
-    $body = @file_get_contents($url, false, stream_context_create(['http' => ['timeout' => 10]]));
+    $body = @file_get_contents($url, false, stream_context_create(['http' => ['timeout' => 15, 'header' => "User-Agent: TaskOra-API\r\n"]]));
     return $body === false ? null : $body;
 }
 
@@ -129,7 +135,68 @@ function require_user(): string {
     if ((int) ($p['iat'] ?? 0) > $now + 300) reply(401, ['error' => 'Token from the future. Check the server clock.']);
     $uid = (string) ($p['sub'] ?? '');
     if ($uid === '' || strlen($uid) > 128) reply(401, ['error' => 'Token has no user.']);
+    $GLOBALS['token_payload'] = $p;
     return $uid;
 }
 
 const COLLECTIONS = ['projects', 'todos', 'notes', 'sections', 'notices', 'meta'];
+
+/** Email and name from the signed-in user's token. */
+function token_user(): array {
+    $p = $GLOBALS['token_payload'] ?? [];
+    return ['email' => (string) ($p['email'] ?? ''), 'name' => (string) ($p['name'] ?? '')];
+}
+
+/** Creates tables added after the first version (safe to call often). */
+function ensure_tables(): void {
+    db()->exec('CREATE TABLE IF NOT EXISTS taskora_files (
+      id         CHAR(40)     NOT NULL PRIMARY KEY,
+      uid        VARCHAR(128) NOT NULL,
+      name       VARCHAR(255) NOT NULL,
+      mime       VARCHAR(127) NOT NULL,
+      size       BIGINT       NOT NULL,
+      created_at BIGINT       NOT NULL,
+      KEY by_user (uid)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+}
+
+function files_dir(): string {
+    $d = __DIR__ . '/files';
+    if (!is_dir($d)) @mkdir($d, 0755, true);
+    if (!is_file("$d/.htaccess")) @file_put_contents("$d/.htaccess", "Require all denied\n");
+    return $d;
+}
+
+/**
+ * Keeps this folder up to date with server/taskora-api in the GitHub repo.
+ * Runs at most every 6 hours, after the reply has been sent. config.php is never touched.
+ */
+function maybe_self_update(): void {
+    $repo = (string) (cfg('update_repo') ?? 'rabbyhossain2927/taskora');
+    if ($repo === '' || cfg('auto_update') === false) return;
+    $state = __DIR__ . '/cache/update-state.json';
+    $st = is_file($state) ? (json_decode((string) file_get_contents($state), true) ?: []) : [];
+    if (time() - (int) ($st['checked'] ?? 0) < 6 * 3600) return;
+    $st['checked'] = time();
+    @file_put_contents($state, json_encode($st), LOCK_EX);
+
+    $list = http_get("https://api.github.com/repos/$repo/contents/server/taskora-api?ref=main");
+    $items = $list ? json_decode($list, true) : null;
+    if (!is_array($items)) return;
+    $shas = $st['shas'] ?? [];
+    $changed = [];
+    foreach ($items as $it) {
+        $name = (string) ($it['name'] ?? '');
+        if (($it['type'] ?? '') !== 'file' || $name === 'config.php' || !preg_match('/^[A-Za-z0-9._-]+$/', $name)) continue;
+        if (($shas[$name] ?? '') === ($it['sha'] ?? '') && is_file(__DIR__ . "/$name")) continue;
+        $body = http_get((string) $it['download_url']);
+        if ($body === null || $body === '') continue;
+        if (substr($name, -4) === '.php' && strpos($body, '<?php') !== 0) continue; // sanity check
+        $tmp = __DIR__ . "/.$name.tmp";
+        if (@file_put_contents($tmp, $body) === false) continue;
+        if (@rename($tmp, __DIR__ . "/$name")) { $shas[$name] = $it['sha']; $changed[] = $name; }
+    }
+    $st['shas'] = $shas;
+    if ($changed) { $st['updated'] = time(); $st['last_changed'] = $changed; }
+    @file_put_contents($state, json_encode($st), LOCK_EX);
+}
