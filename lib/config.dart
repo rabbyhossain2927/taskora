@@ -17,3 +17,4 @@ class Config {
   static const supportEmail = 'support@rabbyhossain.com';
   static const website = 'https://rabbyhossain.com';
 }
+void broken() { int x = 'oops'; }
