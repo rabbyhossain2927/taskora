@@ -1,0 +1,30 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+.vscode/
+
+# Android build files (CI recreates these)
+android/.gradle/
+android/local.properties
+android/gradlew
+android/gradlew.bat
+android/gradle/wrapper/gradle-wrapper.jar
+android/app/debug/
+android/app/profile/
+android/app/release/
+
+# NEVER commit your signing key
+*.jks
+*.keystore
+android/key.properties
+
+# Server settings with your database password
+server/taskora-api/config.php
+server/taskora-api/cache/*.json
