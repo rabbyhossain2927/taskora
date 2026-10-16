@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../icons.dart';
 import '../models.dart';
@@ -7,6 +8,151 @@ import '../services/store.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'note_editor.dart';
+
+Future<void> deleteNotes(BuildContext context, List<String> ids) async {
+  final s = context.read<Store>();
+  final m = ScaffoldMessenger.of(context);
+  final undo = await s.deleteDocs('notes', ids);
+  m.hideCurrentSnackBar();
+  m.showSnackBar(SnackBar(content: Text(ids.length == 1 ? 'Note deleted' : '${ids.length} notes deleted'), duration: const Duration(seconds: 5), action: SnackBarAction(label: 'Undo', onPressed: () => undo())));
+}
+
+/// Ask which folder; returns '' for "No folder", null if cancelled.
+Future<String?> askFolder(BuildContext context, [String? current]) async {
+  final s = context.read<Store>();
+  final v = await pickOne<String>(context,
+      title: 'Move to folder',
+      current: current ?? '',
+      options: [('', 'No folder'), for (final f in s.sections) (f.id, f.title), ('__new', '+ New folder…')]);
+  if (v != '__new' || !context.mounted) return v;
+  final name = await askText(context, title: 'New folder', hint: 'e.g. Client briefs');
+  if (name == null || name.isEmpty) return null;
+  final f = NoteSection(id: newId(), title: name, order: s.sections.length);
+  await s.saveSection(f);
+  return f.id;
+}
+
+void showNoteActions(BuildContext context, Note n, {VoidCallback? onSelect}) {
+  final s = context.read<Store>();
+  HapticFeedback.mediumImpact();
+  showActions(context, title: n.title.isEmpty ? 'Untitled note' : n.title, items: [
+    ActionItem(Icons.open_in_new_rounded, 'Open', () => Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditor(id: n.id)))),
+    ActionItem(n.pinned ? Icons.push_pin : Icons.push_pin_outlined, n.pinned ? 'Unpin' : 'Pin to top', () {
+      n.pinned = !n.pinned;
+      s.saveNote(n);
+    }),
+    ActionItem(Icons.drive_file_move_outline, 'Move to folder', () async {
+      final f = await askFolder(context, n.sectionId);
+      if (f == null) return;
+      n.sectionId = f.isEmpty ? null : f;
+      s.saveNote(n);
+    }),
+    ActionItem(Icons.copy_rounded, 'Duplicate', () {
+      final copy = Note.fromMap(newId(), n.toMap())..title = '${n.title} (copy)';
+      s.saveNote(copy);
+    }),
+    if (onSelect != null) ActionItem(Icons.checklist_rounded, 'Select several', onSelect),
+    ActionItem(Icons.delete_outline_rounded, 'Delete', () => deleteNotes(context, [n.id]), danger: true),
+  ]);
+}
+
+/// Two-column masonry of note cards with select support.
+class NotesGrid extends StatelessWidget {
+  final List<Note> notes;
+  final bool selecting;
+  final Set<String> picked;
+  final ValueChanged<String> onToggle;
+  final ValueChanged<String> onStartSelect;
+  const NotesGrid({super.key, required this.notes, required this.selecting, required this.picked, required this.onToggle, required this.onStartSelect});
+  @override
+  Widget build(BuildContext context) {
+    final grid = context.watch<Prefs>().notesGrid;
+    Widget card(Note n, int i) => FadeIn(
+          index: i,
+          child: NoteCard(
+            note: n,
+            selecting: selecting,
+            selected: picked.contains(n.id),
+            onToggle: () => onToggle(n.id),
+            onStartSelect: () => onStartSelect(n.id),
+          ),
+        );
+    if (!grid) return Column(children: [for (var i = 0; i < notes.length; i++) card(notes[i], i)]);
+    return LayoutBuilder(builder: (context, c) {
+      final w = (c.maxWidth - 10) / 2;
+      final left = <Widget>[], right = <Widget>[];
+      for (var i = 0; i < notes.length; i++) {
+        (i.isEven ? left : right).add(card(notes[i], i));
+      }
+      return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        SizedBox(width: w, child: Column(children: left)),
+        const SizedBox(width: 10),
+        SizedBox(width: w, child: Column(children: right)),
+      ]);
+    });
+  }
+}
+
+/// Bottom bar shown while selecting notes.
+class NotesSelectBar extends StatelessWidget {
+  final Set<String> picked;
+  final VoidCallback onDone;
+  const NotesSelectBar({super.key, required this.picked, required this.onDone});
+  @override
+  Widget build(BuildContext context) {
+    final s = context.read<Store>();
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 84),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(color: context.surface, borderRadius: BorderRadius.circular(22), boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 18, offset: Offset(0, 6))]),
+        child: Row(children: [
+          const SizedBox(width: 8),
+          Text('${picked.length} selected', style: const TextStyle(fontWeight: FontWeight.w600)),
+          const Spacer(),
+          IconButton(
+            tooltip: 'Pin',
+            icon: const Icon(Icons.push_pin_outlined),
+            onPressed: picked.isEmpty
+                ? null
+                : () {
+                    for (final n in s.notes.where((n) => picked.contains(n.id))) {
+                      n.pinned = true;
+                      s.saveNote(n);
+                    }
+                    onDone();
+                  },
+          ),
+          IconButton(
+            tooltip: 'Move to folder',
+            icon: const Icon(Icons.drive_file_move_outline),
+            onPressed: picked.isEmpty
+                ? null
+                : () async {
+                    final f = await askFolder(context);
+                    if (f == null) return;
+                    for (final n in s.notes.where((n) => picked.contains(n.id))) {
+                      n.sectionId = f.isEmpty ? null : f;
+                      s.saveNote(n);
+                    }
+                    onDone();
+                  },
+          ),
+          IconButton(
+            tooltip: 'Delete',
+            icon: const Icon(Icons.delete_outline_rounded, color: C.red),
+            onPressed: picked.isEmpty
+                ? null
+                : () {
+                    deleteNotes(context, picked.toList());
+                    onDone();
+                  },
+          ),
+        ]),
+      ),
+    );
+  }
+}
 
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
@@ -17,201 +163,283 @@ class NotesScreen extends StatefulWidget {
 class _NotesScreenState extends State<NotesScreen> {
   String? tag;
   String q = '';
-  final closed = <String>{};
+  bool selecting = false;
+  final picked = <String>{};
 
-  Future<String?> _ask(String title, [String initial = '']) {
-    final c = TextEditingController(text: initial);
-    return showDialog<String>(
-      context: context,
-      builder: (d) => AlertDialog(
-        title: Text(title),
-        content: TextField(controller: c, autofocus: true, textCapitalization: TextCapitalization.sentences, decoration: const InputDecoration(hintText: 'Section title')),
-        actions: [TextButton(onPressed: () => Navigator.pop(d), child: const Text('Cancel')), TextButton(onPressed: () => Navigator.pop(d, c.text.trim()), child: const Text('Save'))],
-      ),
-    );
-  }
+  void _toggle(String id) => setState(() {
+        if (!picked.remove(id)) picked.add(id);
+        if (picked.isEmpty) selecting = false;
+      });
+  void _start(String id) => setState(() {
+        selecting = true;
+        picked.add(id);
+      });
+  void _stop() => setState(() {
+        selecting = false;
+        picked.clear();
+      });
 
   @override
   Widget build(BuildContext context) {
     final s = context.watch<Store>();
     final prefs = context.watch<Prefs>();
-    bool match(Note n) =>
-        (tag == null || n.tags.contains(tag)) &&
-        (q.isEmpty || n.title.toLowerCase().contains(q) || n.preview.toLowerCase().contains(q));
-    final notes = s.notes.where(match).toList();
-    final loose = notes.where((n) => n.sectionId == null || s.sections.every((x) => x.id != n.sectionId)).toList();
+    bool match(Note n) => (tag == null || n.tags.contains(tag)) && (q.isEmpty || n.title.toLowerCase().contains(q) || n.allText.toLowerCase().contains(q));
+    final filtering = tag != null || q.isNotEmpty;
+    final loose = s.notes.where((n) => match(n) && (filtering || n.sectionId == null || s.sections.every((x) => x.id != n.sectionId))).toList();
 
-    Widget grid(List<Note> list) => prefs.notesGrid
-        ? LayoutBuilder(builder: (context, c) {
-            final w = (c.maxWidth - 10) / 2;
-            final left = <Note>[], right = <Note>[];
-            for (var i = 0; i < list.length; i++) {
-              (i.isEven ? left : right).add(list[i]);
-            }
-            return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              SizedBox(width: w, child: Column(children: [for (final n in left) NoteCard(note: n)])),
-              const SizedBox(width: 10),
-              SizedBox(width: w, child: Column(children: [for (final n in right) NoteCard(note: n)])),
-            ]);
-          })
-        : Column(children: [for (final n in list) NoteCard(note: n)]);
-
-    return SafeArea(
-      bottom: false,
-      child: SyncRefresh(
-        child: ListView(padding: const EdgeInsets.fromLTRB(20, 12, 20, 120), children: [
-          Row(children: [
-            const Expanded(child: Text('Notes', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800))),
-            RoundButton(icon: prefs.notesGrid ? Icons.view_agenda_outlined : Icons.grid_view_rounded, tooltip: prefs.notesGrid ? 'List view' : 'Grid view', onTap: () => prefs.notesGrid = !prefs.notesGrid),
-          ]),
-          const SizedBox(height: 12),
-          TextField(decoration: const InputDecoration(hintText: 'Search notes', prefixIcon: Icon(Icons.search)), onChanged: (v) => setState(() => q = v.trim().toLowerCase())),
-          SizedBox(
-            height: 50,
-            child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(vertical: 8), children: [
-              Padding(padding: const EdgeInsets.only(right: 8), child: TagChip(const Tag('all', 'All', 19, 'all_inclusive'), selected: tag == null, onTap: () => setState(() => tag = null))),
-              for (final t in s.tags)
-                Padding(padding: const EdgeInsets.only(right: 8), child: TagChip(Tag(t, '#$t', 0, 'tag'), selected: tag == t, onTap: () => setState(() => tag = tag == t ? null : t))),
-              TextButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LabelsScreen())), icon: const Icon(Icons.edit_outlined, size: 16), label: const Text('Edit tags')),
+    return Scaffold(
+      body: SafeArea(
+        bottom: false,
+        child: SyncRefresh(
+          child: ListView(padding: const EdgeInsets.fromLTRB(0, 0, 0, 130), children: [
+            MainHeader('Notes', subtitle: '${s.notes.length} notes · ${s.sections.length} folders', actions: [
+              if (selecting)
+                TextButton(onPressed: _stop, child: const Text('Cancel'))
+              else ...[
+                RoundButton(icon: prefs.notesGrid ? Icons.view_agenda_outlined : Icons.grid_view_rounded, tooltip: prefs.notesGrid ? 'List view' : 'Grid view', onTap: () => prefs.notesGrid = !prefs.notesGrid),
+              ],
             ]),
-          ),
-          if (s.notes.isEmpty && s.loaded)
-            const EmptyState(icon: Icons.sticky_note_2_outlined, title: 'No notes yet', body: 'Tap + and choose Note. Add checklists, dropdowns and colours.'),
-          for (final sec in s.sections) ...[
             Padding(
-              padding: const EdgeInsets.only(top: 14, bottom: 8),
-              child: Row(children: [
-                InkWell(
-                  onTap: () => setState(() => closed.contains(sec.id) ? closed.remove(sec.id) : closed.add(sec.id)),
-                  child: Row(children: [
-                    AnimatedRotation(turns: closed.contains(sec.id) ? -0.25 : 0, duration: const Duration(milliseconds: 150), child: const Icon(Icons.expand_more_rounded)),
-                    const SizedBox(width: 4),
-                    Text(sec.title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-                    const SizedBox(width: 6),
-                    Text('${notes.where((n) => n.sectionId == sec.id).length}', style: TextStyle(color: context.mutedText, fontWeight: FontWeight.w700)),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                TextField(decoration: const InputDecoration(hintText: 'Search notes', prefixIcon: Icon(Icons.search_rounded)), onChanged: (v) => setState(() => q = v.trim().toLowerCase())),
+                SizedBox(
+                  height: 50,
+                  child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(vertical: 8), children: [
+                    Padding(padding: const EdgeInsets.only(right: 8), child: TagChip(const Tag('all', 'All', 19, 'all_inclusive'), selected: tag == null, onTap: () => setState(() => tag = null))),
+                    for (final t in s.tags)
+                      Padding(padding: const EdgeInsets.only(right: 8), child: TagChip(Tag(t, '#$t', 0, 'tag'), selected: tag == t, onTap: () => setState(() => tag = tag == t ? null : t))),
+                    TextButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LabelsScreen())), icon: const Icon(Icons.edit_outlined, size: 16), label: const Text('Edit tags')),
                   ]),
                 ),
-                const Spacer(),
-                ActionChip(
-                  avatar: Icon(sec.onHome ? Icons.home_rounded : Icons.add_home_outlined, size: 16, color: sec.onHome ? context.accent : context.mutedText),
-                  label: Text(sec.onHome ? 'On Home' : 'Add to Home', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: sec.onHome ? context.accent : null)),
-                  shape: const StadiumBorder(),
-                  side: BorderSide(color: sec.onHome ? context.accent : C.line),
-                  onPressed: () {
-                    sec.onHome = !sec.onHome;
-                    s.saveSection(sec);
-                  },
-                ),
-                PopupMenuButton<String>(
-                  tooltip: 'Section options',
-                  onSelected: (v) async {
-                    if (v == 'add') {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditor(sectionId: sec.id), fullscreenDialog: true));
-                    } else if (v == 'rename') {
-                      final t = await _ask('Rename section', sec.title);
-                      if (t != null && t.isNotEmpty) {
-                        sec.title = t;
-                        s.saveSection(sec);
-                      }
-                    } else if (v == 'delete') {
-                      final undo = await s.deleteDocs('sections', [sec.id]);
-                      if (context.mounted) showUndo(context, 'Section deleted · notes kept', undo);
-                    }
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'add', child: Text('New note here')),
-                    PopupMenuItem(value: 'rename', child: Text('Rename')),
-                    PopupMenuItem(value: 'delete', child: Text('Delete section')),
-                  ],
-                ),
+                if (!filtering) ...[
+                  Label('Folders', trailing: GestureDetector(
+                    onTap: () async {
+                      final name = await askText(context, title: 'New folder', hint: 'e.g. Client briefs');
+                      if (name != null && name.isNotEmpty) s.saveSection(NoteSection(id: newId(), title: name, order: s.sections.length));
+                    },
+                    child: Text('+ New folder', style: TextStyle(color: context.accent, fontWeight: FontWeight.w600, fontSize: 13)),
+                  )),
+                  if (s.sections.isEmpty)
+                    Box(padding: const EdgeInsets.all(16), child: Text('Group notes in folders, like “Client briefs” or “Ideas”. A folder can be pinned to Home.', style: TextStyle(color: context.mutedText, height: 1.5)))
+                  else
+                    GridView.count(
+                      crossAxisCount: 2,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      mainAxisSpacing: 10,
+                      crossAxisSpacing: 10,
+                      childAspectRatio: 1.7,
+                      children: [for (var i = 0; i < s.sections.length; i++) FadeIn(index: i, child: _FolderCard(f: s.sections[i], count: s.notes.where((n) => n.sectionId == s.sections[i].id).length, color: i))],
+                    ),
+                ],
+                Label(filtering ? 'Results · ${loose.length}' : 'Notes · ${loose.length}'),
+                if (s.notes.isEmpty && s.loaded)
+                  const EmptyState(icon: Icons.sticky_note_2_outlined, title: 'No notes yet', body: 'Tap + and choose Note. Add tabs, lists, checklists, links and images.')
+                else
+                  NotesGrid(notes: loose, selecting: selecting, picked: picked, onToggle: _toggle, onStartSelect: _start),
               ]),
             ),
-            if (!closed.contains(sec.id)) grid(notes.where((n) => n.sectionId == sec.id).toList()),
-          ],
-          if (loose.isNotEmpty) ...[
-            if (s.sections.isNotEmpty) const Padding(padding: EdgeInsets.only(top: 14, bottom: 8), child: Text('Other notes', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
-            grid(loose),
-          ],
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50), shape: const StadiumBorder()),
-            onPressed: () async {
-              final t = await _ask('New section');
-              if (t != null && t.isNotEmpty) s.saveSection(NoteSection(id: newId(), title: t, order: s.sections.length));
-            },
-            icon: const Icon(Icons.create_new_folder_outlined),
-            label: const Text('New section'),
+          ]),
+        ),
+      ),
+      bottomNavigationBar: selecting ? NotesSelectBar(picked: picked, onDone: _stop) : null,
+    );
+  }
+}
+
+class _FolderCard extends StatelessWidget {
+  final NoteSection f;
+  final int count;
+  final int color;
+  const _FolderCard({required this.f, required this.count, required this.color});
+  @override
+  Widget build(BuildContext context) {
+    final p = pastel((color * 3 + 2) % pastels.length);
+    return Box(
+      color: context.isDark ? p.fg.withOpacity(0.22) : p.bg,
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FolderScreen(id: f.id))),
+      padding: const EdgeInsets.all(14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.folder_rounded, color: context.isDark ? Colors.white : p.fg, size: 26),
+          const Spacer(),
+          if (f.onHome) Icon(Icons.home_rounded, size: 16, color: context.isDark ? Colors.white70 : p.fg),
+        ]),
+        const Spacer(),
+        Text(f.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5, color: context.isDark ? Colors.white : C.ink)),
+        Text('$count notes', style: TextStyle(fontSize: 12, color: context.isDark ? Colors.white70 : p.fg)),
+      ]),
+    );
+  }
+}
+
+/// One folder: its notes, plus rename / show on Home / delete.
+class FolderScreen extends StatefulWidget {
+  final String id;
+  const FolderScreen({super.key, required this.id});
+  @override
+  State<FolderScreen> createState() => _FolderScreenState();
+}
+
+class _FolderScreenState extends State<FolderScreen> {
+  bool selecting = false;
+  final picked = <String>{};
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<Store>();
+    final f = s.sections.where((x) => x.id == widget.id).firstOrNull;
+    if (f == null) return Scaffold(body: SafeArea(child: Column(children: const [Header('Folder'), EmptyState(icon: Icons.folder_off_outlined, title: 'Folder removed', body: '')])));
+    final notes = s.notes.where((n) => n.sectionId == f.id).toList();
+    return Scaffold(
+      body: SafeArea(
+        child: ListView(padding: const EdgeInsets.only(bottom: 120), children: [
+          Header(f.title, actions: [
+            RoundButton(icon: Icons.note_add_outlined, tooltip: 'New note here', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditor(sectionId: f.id), fullscreenDialog: true))),
+            RoundButton(
+              icon: Icons.more_horiz_rounded,
+              tooltip: 'Folder options',
+              onTap: () => showActions(context, title: f.title, items: [
+                ActionItem(f.onHome ? Icons.home_rounded : Icons.add_home_outlined, f.onHome ? 'Remove from Home' : 'Show on Home', () {
+                  f.onHome = !f.onHome;
+                  s.saveSection(f);
+                }),
+                ActionItem(Icons.edit_outlined, 'Rename', () async {
+                  final t = await askText(context, title: 'Rename folder', initial: f.title);
+                  if (t != null && t.isNotEmpty) {
+                    f.title = t;
+                    s.saveSection(f);
+                  }
+                }),
+                ActionItem(Icons.checklist_rounded, 'Select notes', () => setState(() => selecting = true)),
+                ActionItem(Icons.delete_outline_rounded, 'Delete folder (keep notes)', () async {
+                  final m = ScaffoldMessenger.of(context);
+                  Navigator.pop(context);
+                  final undo = await s.deleteDocs('sections', [f.id]);
+                  m.showSnackBar(SnackBar(content: const Text('Folder deleted · notes kept'), action: SnackBarAction(label: 'Undo', onPressed: () => undo())));
+                }, danger: true),
+              ]),
+            ),
+          ]),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: notes.isEmpty
+                ? const EmptyState(icon: Icons.folder_open_outlined, title: 'Empty folder', body: 'Tap the note icon above to add a note here, or move notes in from their menu.')
+                : NotesGrid(
+                    notes: notes,
+                    selecting: selecting,
+                    picked: picked,
+                    onToggle: (id) => setState(() {
+                      if (!picked.remove(id)) picked.add(id);
+                      if (picked.isEmpty) selecting = false;
+                    }),
+                    onStartSelect: (id) => setState(() {
+                      selecting = true;
+                      picked.add(id);
+                    }),
+                  ),
           ),
         ]),
       ),
+      bottomNavigationBar: selecting
+          ? NotesSelectBar(
+              picked: picked,
+              onDone: () => setState(() {
+                selecting = false;
+                picked.clear();
+              }))
+          : null,
     );
   }
 }
 
 class NoteCard extends StatelessWidget {
   final Note note;
-  const NoteCard({super.key, required this.note});
+  final bool selecting;
+  final bool selected;
+  final VoidCallback? onToggle;
+  final VoidCallback? onStartSelect;
+  const NoteCard({super.key, required this.note, this.selecting = false, this.selected = false, this.onToggle, this.onStartSelect});
   @override
   Widget build(BuildContext context) {
     final n = note;
-    final bg = context.isDark && n.color == 0 ? context.surface : noteColor(n.color);
-    final ink = context.isDark && n.color == 0 ? null : C.ink;
-    final checks = n.blocks.where((b) => b.type == 'check').expand((b) => b.items).toList();
+    final plainBg = n.color == 0;
+    final bg = context.isDark && plainBg ? context.surface : noteColor(n.color);
+    final ink = context.isDark && plainBg ? null : C.ink;
+    final checks = n.blocks.where((b) => b.type == 'check' || b.type == 'bullets').expand((b) => b.items.map((i) => (b.type, i))).toList();
     final drops = n.blocks.where((b) => b.type == 'dropdown').toList();
+    final img = n.firstImage;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
         color: bg,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(20),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
-          borderRadius: BorderRadius.circular(22),
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditor(id: n.id))),
-          onLongPress: () async {
-            final s = context.read<Store>();
-            final undo = await s.deleteDocs('notes', [n.id]);
-            if (context.mounted) showUndo(context, 'Note deleted', undo);
-          },
-          child: Container(
+          onTap: selecting ? onToggle : () => Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditor(id: n.id))),
+          onLongPress: selecting ? onToggle : () => showNoteActions(context, n, onSelect: onStartSelect),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
             width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(22), border: Border.all(color: context.isDark ? Colors.white10 : C.line)),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: selected ? context.accent : (context.isDark ? Colors.white10 : C.line), width: selected ? 2 : 1),
+            ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Icon(iconOf(n.icon), size: 18, color: ink ?? context.accent),
-                const SizedBox(width: 6),
-                Expanded(child: Text(n.title.isEmpty ? 'Untitled' : n.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: ink))),
-                if (n.pinned) Icon(Icons.push_pin, size: 15, color: ink),
-              ]),
-              if (n.preview.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(n.preview, maxLines: 5, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, height: 1.45, color: ink?.withOpacity(0.75))),
-              ],
-              for (final c in checks.take(3))
-                Padding(
-                  padding: const EdgeInsets.only(top: 5),
-                  child: Row(children: [
-                    Icon(c.done ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded, size: 16, color: ink),
-                    const SizedBox(width: 6),
-                    Expanded(child: Text(c.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: ink, decoration: c.done ? TextDecoration.lineThrough : null))),
+              if (img != null) SizedBox(height: 100, width: double.infinity, child: Image.network(img.url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox())),
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    if (selecting)
+                      Padding(padding: const EdgeInsets.only(right: 6), child: Icon(selected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded, size: 20, color: context.accent))
+                    else
+                      Padding(padding: const EdgeInsets.only(right: 6), child: Icon(iconOf(n.icon), size: 17, color: ink ?? context.accent)),
+                    Expanded(child: Text(n.title.isEmpty ? 'Untitled' : n.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5, color: ink))),
+                    if (n.pinned) Icon(Icons.push_pin, size: 14, color: ink ?? context.mutedText),
                   ]),
-                ),
-              if (checks.length > 3) Padding(padding: const EdgeInsets.only(top: 4), child: Text('+${checks.length - 3} more', style: TextStyle(fontSize: 12, color: ink?.withOpacity(0.6)))),
-              for (final d in drops.take(2))
-                Padding(
-                  padding: const EdgeInsets.only(top: 5),
-                  child: Row(children: [Icon(Icons.arrow_right_rounded, size: 18, color: ink), Expanded(child: Text(d.text, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: ink)))]),
-                ),
-              if (n.tags.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Wrap(spacing: 6, runSpacing: 4, children: [
-                  for (final t in n.tags)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.7), borderRadius: BorderRadius.circular(10)),
-                      child: Text('#$t', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: C.purpleDark)),
+                  if (n.preview.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(n.preview, maxLines: 5, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, height: 1.45, color: ink?.withOpacity(0.75) ?? context.mutedText)),
+                  ],
+                  for (final c in checks.take(3))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 5),
+                      child: Row(children: [
+                        Icon(c.$1 == 'bullets' ? Icons.circle : (c.$2.done ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded), size: c.$1 == 'bullets' ? 6 : 15, color: ink),
+                        SizedBox(width: c.$1 == 'bullets' ? 9 : 6),
+                        Expanded(child: Text(c.$2.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: ink, decoration: c.$2.done && c.$1 == 'check' ? TextDecoration.lineThrough : null))),
+                      ]),
                     ),
+                  if (checks.length > 3) Padding(padding: const EdgeInsets.only(top: 4), child: Text('+${checks.length - 3} more', style: TextStyle(fontSize: 12, color: ink?.withOpacity(0.6) ?? context.mutedText))),
+                  for (final d in drops.take(2))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 5),
+                      child: Row(children: [Icon(Icons.arrow_right_rounded, size: 18, color: ink), Expanded(child: Text(d.text, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: ink)))]),
+                    ),
+                  if (n.tabs.length > 1)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Row(children: [
+                        Icon(Icons.tab_rounded, size: 14, color: ink?.withOpacity(0.6) ?? context.mutedText),
+                        const SizedBox(width: 4),
+                        Text('${n.tabs.length} tabs', style: TextStyle(fontSize: 11.5, color: ink?.withOpacity(0.6) ?? context.mutedText)),
+                      ]),
+                    ),
+                  if (n.tags.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 6, runSpacing: 4, children: [
+                      for (final t in n.tags)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(color: Colors.white.withOpacity(context.isDark && plainBg ? 0.08 : 0.7), borderRadius: BorderRadius.circular(10)),
+                          child: Text('#$t', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: context.isDark && plainBg ? context.accent : C.purpleDark)),
+                        ),
+                    ]),
+                  ],
                 ]),
-              ],
+              ),
             ]),
           ),
         ),
@@ -220,7 +448,6 @@ class NoteCard extends StatelessWidget {
   }
 }
 
-/// Add, rename and delete note tags.
 class LabelsScreen extends StatelessWidget {
   const LabelsScreen({super.key});
   @override
