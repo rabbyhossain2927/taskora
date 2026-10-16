@@ -49,7 +49,7 @@ class UpdatePrompt {
             const SizedBox(width: 14),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Update ready', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                const Text('Update ready', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                 Text(['Version ${u.version}', if (u.sizeLabel.isNotEmpty) u.sizeLabel].join(' · '), style: TextStyle(color: ctx.mutedText, fontSize: 13)),
               ]),
             ),
@@ -101,7 +101,7 @@ class UpdatePrompt {
   static Widget _line(String tag, String text, Color c) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: Text.rich(TextSpan(children: [
-          TextSpan(text: '$tag · ', style: TextStyle(fontWeight: FontWeight.w800, color: c)),
+          TextSpan(text: '$tag · ', style: TextStyle(fontWeight: FontWeight.w700, color: c)),
           TextSpan(text: text),
         ]), style: const TextStyle(fontSize: 13.5, height: 1.45)),
       );
@@ -170,7 +170,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
                     child: state == 'checking' ? Padding(padding: const EdgeInsets.all(20), child: CircularProgressIndicator(strokeWidth: 4, color: fg)) : Icon(icon, size: 34, color: fg),
                   ),
                   const SizedBox(height: 12),
-                  Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                  Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 6),
                   Text(sub, textAlign: TextAlign.center, style: TextStyle(color: context.mutedText, height: 1.5)),
                   const SizedBox(height: 16),

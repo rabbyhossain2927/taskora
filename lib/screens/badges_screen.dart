@@ -82,8 +82,8 @@ class _BadgesScreenState extends State<BadgesScreen> with SingleTickerProviderSt
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('$streak', style: const TextStyle(fontSize: 44, fontWeight: FontWeight.w800, color: Colors.white, height: 1)),
-                      const Text('day streak', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
+                      Text('$streak', style: const TextStyle(fontSize: 44, fontWeight: FontWeight.w700, color: Colors.white, height: 1)),
+                      const Text('day streak', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
                       const SizedBox(height: 4),
                       Text(streak == 0 ? 'Finish a to-do today to light it up!' : 'Keep it going — finish one today.', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                     ]),
@@ -107,7 +107,7 @@ class _BadgesScreenState extends State<BadgesScreen> with SingleTickerProviderSt
                           child: Text(lit ? '🔥' : '·', style: const TextStyle(fontSize: 16)),
                         ),
                         const SizedBox(height: 4),
-                        Text(['M', 'T', 'W', 'T', 'F', 'S', 'S'][d.weekday - 1], style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: i == 0 ? const Color(0xFFFF7A59) : context.mutedText)),
+                        Text(['M', 'T', 'W', 'T', 'F', 'S', 'S'][d.weekday - 1], style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: i == 0 ? const Color(0xFFFF7A59) : context.mutedText)),
                       ]);
                     }),
                 ]),
@@ -116,7 +116,7 @@ class _BadgesScreenState extends State<BadgesScreen> with SingleTickerProviderSt
               Box(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
-                    Text('Level $level', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                    Text('Level $level', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                     const Spacer(),
                     Text('$xp / $nextLevel XP', style: TextStyle(color: context.mutedText, fontWeight: FontWeight.w700)),
                   ]),
@@ -159,13 +159,13 @@ class _BadgesScreenState extends State<BadgesScreen> with SingleTickerProviderSt
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Text(st.emoji, style: TextStyle(fontSize: 72, color: st.earned ? null : Colors.black.withOpacity(0.3))),
             const SizedBox(height: 8),
-            Text(st.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+            Text(st.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
             Text(st.how, style: TextStyle(color: context.mutedText)),
             const SizedBox(height: 14),
             ClipRRect(borderRadius: BorderRadius.circular(6), child: LinearProgressIndicator(value: st.progress, minHeight: 10, color: c.fg, backgroundColor: c.bg)),
             const SizedBox(height: 6),
-            Text(st.earned ? 'Earned! 🎉' : '${(st.progress * 100).round()}% there', style: TextStyle(fontWeight: FontWeight.w800, color: c.fg)),
+            Text(st.earned ? 'Earned! 🎉' : '${(st.progress * 100).round()}% there', style: TextStyle(fontWeight: FontWeight.w700, color: c.fg)),
           ]),
         ),
       ),
@@ -189,7 +189,7 @@ class _BadgesScreenState extends State<BadgesScreen> with SingleTickerProviderSt
               ]),
             ),
             const SizedBox(height: 6),
-            Text(st.name, textAlign: TextAlign.center, maxLines: 2, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: st.earned ? c.fg : context.mutedText)),
+            Text(st.name, textAlign: TextAlign.center, maxLines: 2, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: st.earned ? c.fg : context.mutedText)),
           ]),
         ),
       ),

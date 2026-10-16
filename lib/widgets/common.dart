@@ -298,7 +298,7 @@ class Segmented<T> extends StatelessWidget {
                   height: 38,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(color: it.$1 == value ? context.surface : Colors.transparent, borderRadius: BorderRadius.circular(12)),
-                  child: Text(it.$2, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: it.$1 == value ? context.accent : context.mutedText)),
+                  child: Text(it.$2, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: it.$1 == value ? context.accent : context.mutedText)),
                 ),
               ),
             ),
@@ -399,7 +399,7 @@ class _IconSheetState extends State<_IconSheet> {
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
           child: Row(children: [
-            Text('Choose an icon', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            Text('Choose an icon', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             const Spacer(),
             Text('$iconCount icons', style: TextStyle(color: context.mutedText, fontWeight: FontWeight.w600)),
           ]),
@@ -539,7 +539,7 @@ class EmptyState extends StatelessWidget {
         child: Column(children: [
           Container(width: 72, height: 72, decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withOpacity(0.12), shape: BoxShape.circle), child: Icon(icon, size: 32, color: context.accent)),
           const SizedBox(height: 14),
-          Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
           Text(body, textAlign: TextAlign.center, style: TextStyle(color: context.mutedText, height: 1.5)),
         ]),
@@ -584,7 +584,7 @@ class SoonPill extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
         decoration: BoxDecoration(color: C.amberBg, borderRadius: BorderRadius.circular(10)),
-        child: const Text('Soon', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: C.amber)),
+        child: const Text('Soon', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: C.amber)),
       );
 }
 

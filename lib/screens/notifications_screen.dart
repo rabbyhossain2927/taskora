@@ -52,7 +52,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   selecting = !selecting;
                   picked.clear();
                 }),
-                child: Text(selecting ? 'Cancel' : 'Select', style: const TextStyle(fontWeight: FontWeight.w800)),
+                child: Text(selecting ? 'Cancel' : 'Select', style: const TextStyle(fontWeight: FontWeight.w700)),
               ),
           ]),
           if (selecting)
@@ -152,7 +152,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         const SizedBox(width: 12),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(n.title, style: TextStyle(fontWeight: n.read ? FontWeight.w600 : FontWeight.w800, fontSize: 14.5)),
+            Text(n.title, style: TextStyle(fontWeight: n.read ? FontWeight.w600 : FontWeight.w700, fontSize: 14.5)),
             if (n.body.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(n.body, style: TextStyle(color: context.mutedText, fontSize: 13, height: 1.4))),
             const SizedBox(height: 4),
             Text(dTime.format(n.createdAt), style: TextStyle(color: context.mutedText, fontSize: 11.5)),
