@@ -10,9 +10,9 @@ import '../widgets/common.dart';
 import 'about_screens.dart';
 import 'backup_screen.dart';
 import 'badges_screen.dart';
-import 'home_screen.dart';
+import 'feedback_screen.dart';
+import 'howto_screen.dart';
 import 'notes_screen.dart';
-import 'notifications_screen.dart';
 import 'taxonomy_screen.dart';
 import 'update_screen.dart';
 
@@ -26,6 +26,7 @@ class ProfileScreen extends StatelessWidget {
     final s = context.watch<Store>();
     final u = FirebaseAuth.instance.currentUser;
     final done = s.todos.where((t) => t.done).length;
+    final streak = streakOf(s);
     return Scaffold(
       body: SafeArea(
         child: ListView(padding: const EdgeInsets.only(bottom: 40), children: [
@@ -33,108 +34,121 @@ class ProfileScreen extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Center(
-                child: Stack(children: [
-                  const Avatar(size: 96),
-                  Positioned(
-                    right: 2,
-                    bottom: 2,
-                    child: Container(
-                      width: 26,
-                      height: 26,
-                      decoration: BoxDecoration(color: s.hasPendingWrites ? C.amber : C.green, shape: BoxShape.circle, border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 3)),
-                      child: Icon(s.hasPendingWrites ? Icons.sync_rounded : Icons.check_rounded, size: 13, color: Colors.white),
+              FadeIn(
+                child: Column(children: [
+                  Stack(children: [
+                    const Avatar(size: 92),
+                    Positioned(
+                      right: 2,
+                      bottom: 2,
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(color: s.syncError != null ? C.red : (s.hasPendingWrites ? C.amber : C.green), shape: BoxShape.circle, border: Border.all(color: Theme.of(context).canvasColor, width: 3)),
+                        child: Icon(s.syncError != null ? Icons.cloud_off_rounded : (s.hasPendingWrites ? Icons.sync_rounded : Icons.check_rounded), size: 12, color: Colors.white),
+                      ),
                     ),
-                  ),
+                  ]),
+                  const SizedBox(height: 10),
+                  Text(u?.displayName ?? 'You', textAlign: TextAlign.center, style: const TextStyle(fontSize: T.title, fontWeight: FontWeight.w700)),
+                  Text(u?.email ?? '', textAlign: TextAlign.center, style: TextStyle(color: context.mutedText, fontSize: T.small)),
+                  TextButton(onPressed: () => _open(context, const EditProfileScreen()), child: const Text('Edit profile')),
                 ]),
               ),
-              const SizedBox(height: 10),
-              Text(u?.displayName ?? 'You', textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-              Text(u?.email ?? '', textAlign: TextAlign.center, style: TextStyle(color: context.mutedText)),
-              const SizedBox(height: 4),
-              Center(child: TextButton(onPressed: () => _open(context, const EditProfileScreen()), child: const Text('Edit profile'))),
-              Row(children: [
-                _stat(context, '${s.projects.length}', 'Projects'),
-                const SizedBox(width: 10),
-                _stat(context, '$done', 'Done'),
-                const SizedBox(width: 10),
-                _stat(context, '${s.notes.length}', 'Notes'),
-              ]),
-              const SizedBox(height: 12),
-              Box(
-                color: const Color(0xFFFFF2DE),
-                onTap: () => _open(context, const BadgesScreen()),
+              FadeIn(
+                index: 1,
                 child: Row(children: [
-                  const Text('🔥', style: TextStyle(fontSize: 30)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('${streakOf(s)}-day streak', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: C.ink)),
-                      const Text('See your sticker book and level', style: TextStyle(color: Color(0xFF8F5A12), fontSize: 13)),
-                    ]),
-                  ),
-                  const Icon(Icons.chevron_right_rounded, color: Color(0xFF8F5A12)),
+                  _stat(context, '${s.projects.length}', 'Projects'),
+                  const SizedBox(width: 10),
+                  _stat(context, '$done', 'Done'),
+                  const SizedBox(width: 10),
+                  _stat(context, '${s.notes.length}', 'Notes'),
                 ]),
               ),
-              const Label('Personalise'),
-              Box(
-                padding: EdgeInsets.zero,
-                child: Column(children: [
-                  RowTile(icon: Icons.tune_rounded, color: 0, title: 'Preferences', onTap: () => _open(context, const PreferencesScreen())),
-                  const Divider(),
-                  RowTile(icon: Icons.palette_outlined, color: 2, title: 'Theme', value: appThemes[Prefs.instance.themeIndex.clamp(0, appThemes.length - 1)].name, onTap: () => _open(context, const ThemeScreen())),
-                  const Divider(),
-                  RowTile(icon: Icons.notifications_none_rounded, color: 6, title: 'Notifications', value: s.unreadCount > 0 ? '${s.unreadCount} new' : null, onTap: () => _open(context, const NotificationsScreen())),
-                ]),
-              ),
-              const Label('Data'),
-              Box(
-                padding: EdgeInsets.zero,
-                child: Column(children: [
-                  RowTile(icon: Icons.cloud_sync_outlined, color: 12, title: 'Backup & sync', onTap: () => _open(context, const BackupScreen())),
-                  const Divider(),
-                  RowTile(icon: Icons.local_offer_outlined, color: 8, title: 'Labels & tags', onTap: () => _open(context, const LabelsScreen())),
-                  const Divider(),
-                  RowTile(icon: Icons.category_outlined, color: 4, title: 'Statuses & categories', onTap: () => _open(context, const TaxonomyScreen())),
-                ]),
-              ),
-              const Label('App'),
-              Box(
-                padding: EdgeInsets.zero,
-                child: Column(children: [
-                  FutureBuilder<UpdateInfo?>(
-                    future: UpdateService.cachedCheck(),
-                    builder: (_, snap) => RowTile(
-                      icon: Icons.system_update_alt_rounded,
-                      color: 12,
-                      title: 'Check for update',
-                      trailing: snap.data != null
-                          ? Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                              decoration: BoxDecoration(color: context.accent, borderRadius: BorderRadius.circular(10)),
-                              child: const Text('New', style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w800)),
-                            )
-                          : null,
-                      onTap: () => _open(context, const UpdateScreen()),
+              const SizedBox(height: 12),
+              FadeIn(
+                index: 2,
+                child: Material(
+                  borderRadius: BorderRadius.circular(22),
+                  clipBehavior: Clip.antiAlias,
+                  child: Ink(
+                    decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFFFFB347), Color(0xFFFF7A59)])),
+                    child: InkWell(
+                      onTap: () => _open(context, const BadgesScreen()),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(children: [
+                          const Breathing(child: Text('🔥', style: TextStyle(fontSize: 30))),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text('$streak-day streak', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.white)),
+                              const Text('Your sticker book and level', style: TextStyle(color: Colors.white70, fontSize: 12.5)),
+                            ]),
+                          ),
+                          const Icon(Icons.chevron_right_rounded, color: Colors.white),
+                        ]),
+                      ),
                     ),
                   ),
-                  const Divider(),
-                  RowTile(icon: Icons.auto_awesome, color: 6, title: 'What’s new', onTap: () => _open(context, const WhatsNewScreen())),
-                  const Divider(),
-                  RowTile(icon: Icons.verified_outlined, color: 10, title: 'License', value: 'Lifetime', onTap: () => _open(context, const LicenseScreen())),
-                  const Divider(),
-                  RowTile(icon: Icons.info_outline, color: 19, title: 'About', onTap: () => _open(context, const AboutScreen())),
-                ]),
+                ),
+              ),
+              const Label('Settings'),
+              FadeIn(
+                index: 3,
+                child: Box(
+                  padding: EdgeInsets.zero,
+                  child: Column(children: [
+                    RowTile(icon: Icons.tune_rounded, color: 0, title: 'Preferences', subtitle: 'Defaults, tags, statuses, categories', onTap: () => _open(context, const PreferencesScreen())),
+                    const Divider(),
+                    RowTile(icon: Icons.palette_outlined, color: 2, title: 'Theme', value: appThemes[Prefs.instance.themeIndex.clamp(0, appThemes.length - 1)].name, onTap: () => _open(context, const ThemeScreen())),
+                    const Divider(),
+                    RowTile(icon: Icons.cloud_sync_outlined, color: 12, title: 'Backup & sync', onTap: () => _open(context, const BackupScreen())),
+                  ]),
+                ),
+              ),
+              const Label('Help'),
+              FadeIn(
+                index: 4,
+                child: Box(
+                  padding: EdgeInsets.zero,
+                  child: Column(children: [
+                    RowTile(icon: Icons.menu_book_outlined, color: 10, title: 'How to use TaskOra', onTap: () => _open(context, const HowToScreen())),
+                    const Divider(),
+                    RowTile(icon: Icons.chat_bubble_outline_rounded, color: 8, title: 'Send feedback', subtitle: 'Report a problem or share an idea', onTap: () => _open(context, const FeedbackScreen())),
+                    const Divider(),
+                    FutureBuilder<UpdateInfo?>(
+                      future: UpdateService.cachedCheck(),
+                      builder: (_, snap) => RowTile(
+                        icon: Icons.system_update_alt_rounded,
+                        color: 12,
+                        title: 'Check for update',
+                        trailing: snap.data != null
+                            ? Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                                decoration: BoxDecoration(color: context.accent, borderRadius: BorderRadius.circular(10)),
+                                child: const Text('New', style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w700)),
+                              )
+                            : null,
+                        onTap: () => _open(context, const UpdateScreen()),
+                      ),
+                    ),
+                    const Divider(),
+                    RowTile(icon: Icons.auto_awesome_outlined, color: 6, title: 'What’s new', onTap: () => _open(context, const WhatsNewScreen())),
+                    const Divider(),
+                    RowTile(icon: Icons.info_outline_rounded, color: 19, title: 'About', onTap: () => _open(context, const AboutScreen())),
+                  ]),
+                ),
               ),
               const SizedBox(height: 18),
               OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52), shape: const StadiumBorder(), foregroundColor: C.red),
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50), foregroundColor: C.red),
                 onPressed: () async {
                   Navigator.of(context).popUntil((r) => r.isFirst);
                   await AuthService.signOut();
                 },
                 icon: const Icon(Icons.logout_rounded),
-                label: const Text('Sign out', style: TextStyle(fontWeight: FontWeight.w800)),
+                label: const Text('Sign out'),
               ),
               const SizedBox(height: 10),
               FutureBuilder<AppVersion>(
@@ -152,8 +166,8 @@ class ProfileScreen extends StatelessWidget {
         child: Box(
           padding: const EdgeInsets.symmetric(vertical: 14),
           child: Column(children: [
-            Text(v, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-            Text(l, style: TextStyle(color: context.mutedText, fontSize: 12, fontWeight: FontWeight.w600)),
+            Text(v, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700)),
+            Text(l, style: TextStyle(color: context.mutedText, fontSize: 12, fontWeight: FontWeight.w500)),
           ]),
         ),
       );
@@ -234,45 +248,74 @@ class ThemeScreen extends StatelessWidget {
     final p = context.watch<Prefs>();
     return Scaffold(
       body: SafeArea(
-        child: ListView(padding: const EdgeInsets.only(bottom: 30), children: [
+        child: ListView(padding: const EdgeInsets.only(bottom: 40), children: [
           const Header('Theme'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Segmented<String>(items: const [('light', 'Light'), ('dark', 'Dark'), ('system', 'System')], value: p.themeMode, onChanged: (v) => p.themeMode = v),
-              const Label('Colour themes'),
+              const Label('Background'),
+              SizedBox(
+                height: 104,
+                child: ListView(scrollDirection: Axis.horizontal, children: [
+                  for (final b in bgStyles)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 10),
+                      child: GestureDetector(
+                        onTap: () => p.bgStyle = b.$1,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: 92,
+                          clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: p.bgStyle == b.$1 ? context.accent : (context.isDark ? Colors.white12 : C.line), width: p.bgStyle == b.$1 ? 2.5 : 1),
+                          ),
+                          child: Stack(children: [
+                            Positioned.fill(child: AppBackground(t: appThemes[p.themeIndex.clamp(0, appThemes.length - 1)], dark: context.isDark, style: b.$1, child: const SizedBox())),
+                            Positioned(left: 8, right: 8, bottom: 8, child: Text(b.$2, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+                          ]),
+                        ),
+                      ),
+                    ),
+                ]),
+              ),
+              const Label('Theme colour'),
               GridView.count(
-                crossAxisCount: 2,
+                crossAxisCount: 3,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 1.05,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 0.95,
                 children: [
                   for (var i = 0; i < appThemes.length; i++)
-                    GestureDetector(
-                      onTap: () => p.themeIndex = i,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: appThemes[i].bg,
-                          borderRadius: BorderRadius.circular(22),
-                          border: Border.all(color: p.themeIndex == i ? appThemes[i].accent : C.line, width: p.themeIndex == i ? 2.5 : 1),
+                    FadeIn(
+                      index: i,
+                      child: Material(
+                        color: p.themeIndex == i ? context.tint : context.surface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(color: p.themeIndex == i ? context.accent : (context.isDark ? Colors.white10 : C.line), width: p.themeIndex == i ? 2 : 1),
                         ),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Row(children: [
-                            Container(width: 26, height: 26, decoration: BoxDecoration(color: appThemes[i].accent, shape: BoxShape.circle)),
-                            const Spacer(),
-                            if (p.themeIndex == i) Icon(Icons.check_circle_rounded, color: appThemes[i].accent),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () => p.themeIndex = i,
+                          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: appThemes[i].accent,
+                                shape: BoxShape.circle,
+                                boxShadow: [BoxShadow(color: appThemes[i].accent.withOpacity(0.4), blurRadius: 14, offset: const Offset(0, 5))],
+                              ),
+                              child: p.themeIndex == i ? const Icon(Icons.check_rounded, color: Colors.white) : null,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(appThemes[i].name, textAlign: TextAlign.center, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: p.themeIndex == i ? context.onTint : null)),
                           ]),
-                          const Spacer(),
-                          Container(height: 10, width: 80, decoration: BoxDecoration(color: appThemes[i].tint, borderRadius: BorderRadius.circular(5))),
-                          const SizedBox(height: 6),
-                          Container(height: 10, width: 50, decoration: BoxDecoration(color: appThemes[i].tint, borderRadius: BorderRadius.circular(5))),
-                          const SizedBox(height: 10),
-                          Text(appThemes[i].name, style: const TextStyle(fontWeight: FontWeight.w800, color: C.ink)),
-                        ]),
+                        ),
                       ),
                     ),
                 ],
@@ -288,61 +331,61 @@ class ThemeScreen extends StatelessWidget {
 class PreferencesScreen extends StatelessWidget {
   const PreferencesScreen({super.key});
 
-  Widget _cycle<T>(BuildContext context, String title, T value, List<(T, String)> options, ValueChanged<T> set, {IconData? icon, int color = 0}) {
-    final idx = options.indexWhere((o) => o.$1 == value);
-    final label = idx < 0 ? options.first.$2 : options[idx].$2;
-    return RowTile(
-      icon: icon,
-      color: color,
-      title: title,
-      trailing: TextButton(
-        onPressed: () => set(options[(idx + 1) % options.length].$1),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [Text(label, style: const TextStyle(fontWeight: FontWeight.w800)), const Icon(Icons.unfold_more_rounded, size: 18)]),
-      ),
-    );
-  }
-
   Widget _switch(String title, bool v, ValueChanged<bool> set, {String? sub, IconData? icon, int color = 0}) =>
       RowTile(icon: icon, color: color, title: title, subtitle: sub, trailing: Switch(value: v, onChanged: set));
 
   @override
   Widget build(BuildContext context) {
     final p = context.watch<Prefs>();
-    Widget group(String t, List<Widget> rows) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Label(t),
-          Box(padding: EdgeInsets.zero, child: Column(children: [for (var i = 0; i < rows.length; i++) ...[if (i > 0) const Divider(), rows[i]]])),
-        ]);
+    var gi = 0;
+    Widget group(String t, List<Widget> rows) => FadeIn(
+          index: gi++,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Label(t),
+            Box(padding: EdgeInsets.zero, child: Column(children: [for (var i = 0; i < rows.length; i++) ...[if (i > 0) const Divider(), rows[i]]])),
+          ]),
+        );
     return Scaffold(
       body: SafeArea(
-        child: ListView(padding: const EdgeInsets.fromLTRB(20, 0, 20, 40), children: [
-          const Padding(padding: EdgeInsets.only(left: 0), child: Header('Preferences')),
-          group('General', [
-            _cycle(context, 'Open app on', p.startTab, const [(0, 'Home'), (1, 'Projects'), (2, 'Stats'), (3, 'To-do'), (4, 'Notes')], (v) => p.startTab = v, icon: Icons.home_outlined),
-            _cycle(context, 'Week starts on', p.weekStart, const [('Saturday', 'Saturday'), ('Sunday', 'Sunday'), ('Monday', 'Monday')], (v) => p.weekStart = v, icon: Icons.calendar_month_outlined, color: 12),
-            _switch('Haptic feedback', p.haptics, (v) => p.haptics = v, icon: Icons.vibration, color: 6),
-          ]),
-          group('To-do', [
-            _cycle(context, 'Default priority', p.defaultPriority, const [(1, 'P1'), (2, 'P2'), (3, 'P3'), (4, 'P4')], (v) => p.defaultPriority = v, icon: Icons.flag_outlined, color: 2),
-            _cycle(context, 'Default reminder', p.defaultReminder, const [('none', 'None'), ('1h', '1 h before'), ('1d', '1 day before')], (v) => p.defaultReminder = v, icon: Icons.alarm, color: 4),
-            _switch('Show completed', p.showCompleted, (v) => p.showCompleted = v, icon: Icons.task_alt, color: 8),
-          ]),
-          group('Projects', [
-            _cycle(context, 'Default currency', p.defaultCurrency, [for (final c in currencySymbols.keys) (c, c)], (v) => p.defaultCurrency = v, icon: Icons.payments_outlined, color: 8),
-            _cycle(context, 'Default platform', p.defaultPlatform, const [('direct', 'Direct'), ('fiverr', 'Fiverr 20%'), ('upwork', 'Upwork 10%'), ('custom', 'Custom')], (v) => p.defaultPlatform = v, icon: Icons.storefront_outlined, color: 10),
-            _switch('Show money on cards', p.showMoney, (v) => p.showMoney = v, icon: Icons.visibility_outlined, color: 12),
-          ]),
-          group('Notes', [
-            _switch('Grid view', p.notesGrid, (v) => p.notesGrid = v, icon: Icons.grid_view_rounded, color: 6),
-            _switch('Show pinned sections on Home', p.showNotesOnHome, (v) => p.showNotesOnHome = v, icon: Icons.home_outlined, color: 0),
-          ]),
-          group('Notifications', [
-            _switch('Reminders', p.remindersOn, (v) => p.remindersOn = v, sub: 'For to-dos and projects', icon: Icons.notifications_active_outlined, color: 4),
-            _switch('Update alerts', p.autoUpdateCheck, (v) => p.autoUpdateCheck = v, sub: 'Popup when a new version is ready', icon: Icons.system_update_alt_rounded, color: 12),
-          ]),
-          group('Focus & sync', [
-            _cycle(context, 'Focus length', p.focusMinutes, const [(15, '15 min'), (25, '25 min'), (45, '45 min'), (60, '60 min')], (v) => p.focusMinutes = v, icon: Icons.timer_outlined, color: 0),
-            _cycle(context, 'Keep backups', p.keepBackups, const [(5, '5'), (10, '10'), (30, '30')], (v) => p.keepBackups = v, icon: Icons.inventory_2_outlined, color: 19),
-          ]),
+        child: ListView(padding: const EdgeInsets.only(bottom: 40), children: [
+          const Header('Preferences'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              group('Organise', [
+                RowTile(icon: Icons.local_offer_outlined, color: 8, title: 'Labels & tags', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LabelsScreen()))),
+                RowTile(icon: Icons.flag_outlined, color: 12, title: 'Statuses', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TaxonomyScreen(initial: 'statuses')))),
+                RowTile(icon: Icons.category_outlined, color: 4, title: 'Categories', subtitle: 'For projects and to-dos', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TaxonomyScreen(initial: 'todoCats')))),
+              ]),
+              group('General', [
+                DropdownTile<int>(icon: Icons.home_outlined, title: 'Open app on', value: p.startTab.clamp(0, 3), options: const [(0, 'Home'), (1, 'Projects'), (2, 'To-do'), (3, 'Notes')], onChanged: (v) => p.startTab = v),
+                DropdownTile<String>(icon: Icons.calendar_month_outlined, color: 12, title: 'Week starts on', value: p.weekStart, options: const [('Saturday', 'Saturday'), ('Sunday', 'Sunday'), ('Monday', 'Monday')], onChanged: (v) => p.weekStart = v),
+                _switch('Haptic feedback', p.haptics, (v) => p.haptics = v, icon: Icons.vibration, color: 6),
+              ]),
+              group('To-do', [
+                DropdownTile<int>(icon: Icons.flag_outlined, color: 2, title: 'Default priority', value: p.defaultPriority.clamp(1, 5), options: [for (var i = 1; i <= 5; i++) (i, priorityName(i))], onChanged: (v) => p.defaultPriority = v),
+                DropdownTile<String>(icon: Icons.alarm, color: 4, title: 'Default reminder', value: p.defaultReminder, options: const [('none', 'None'), ('1h', '1 h before'), ('1d', '1 day before')], onChanged: (v) => p.defaultReminder = v),
+                _switch('Show completed', p.showCompleted, (v) => p.showCompleted = v, icon: Icons.task_alt, color: 8),
+              ]),
+              group('Projects', [
+                DropdownTile<String>(icon: Icons.payments_outlined, color: 8, title: 'Default currency', value: p.defaultCurrency, options: [for (final c in currencySymbols.keys) (c, c)], onChanged: (v) => p.defaultCurrency = v),
+                DropdownTile<String>(icon: Icons.storefront_outlined, color: 10, title: 'Default platform', value: p.defaultPlatform, options: const [('direct', 'Direct'), ('fiverr', 'Fiverr 20%'), ('upwork', 'Upwork 10%'), ('custom', 'Custom')], onChanged: (v) => p.defaultPlatform = v),
+                _switch('Show money on cards', p.showMoney, (v) => p.showMoney = v, icon: Icons.visibility_outlined, color: 12),
+              ]),
+              group('Notes', [
+                _switch('Grid view', p.notesGrid, (v) => p.notesGrid = v, icon: Icons.grid_view_rounded, color: 6),
+                _switch('Show pinned folders on Home', p.showNotesOnHome, (v) => p.showNotesOnHome = v, icon: Icons.home_outlined, color: 0),
+              ]),
+              group('Notifications', [
+                _switch('Reminders', p.remindersOn, (v) => p.remindersOn = v, sub: 'For to-dos and projects', icon: Icons.notifications_active_outlined, color: 4),
+                _switch('Update alerts', p.autoUpdateCheck, (v) => p.autoUpdateCheck = v, sub: 'When a new version is ready', icon: Icons.system_update_alt_rounded, color: 12),
+              ]),
+              group('Focus & backups', [
+                DropdownTile<int>(icon: Icons.timer_outlined, title: 'Focus length', value: p.focusMinutes, options: const [(15, '15 min'), (25, '25 min'), (45, '45 min'), (60, '60 min'), (90, '90 min')], onChanged: (v) => p.focusMinutes = v),
+                DropdownTile<int>(icon: Icons.inventory_2_outlined, color: 19, title: 'Keep backups', value: p.keepBackups, options: const [(5, '5'), (10, '10'), (30, '30')], onChanged: (v) => p.keepBackups = v),
+              ]),
+            ]),
+          ),
         ]),
       ),
     );

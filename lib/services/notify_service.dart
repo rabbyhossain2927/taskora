@@ -51,6 +51,15 @@ class NotifyService {
 
   static Future<void> cancelFor(String id) => _plugin.cancel(_idFor(id));
 
+  static const _general = AndroidNotificationDetails('general', 'TaskOra', channelDescription: 'Backups, sync and other app news', importance: Importance.defaultImportance, priority: Priority.defaultPriority);
+
+  /// Shows any in-app notice in the phone's notification panel too.
+  static Future<void> showNotice(String title, String body) async {
+    try {
+      await _plugin.show(DateTime.now().millisecondsSinceEpoch & 0x7fffffff, title, body, const NotificationDetails(android: _general), payload: 'notice');
+    } catch (_) {}
+  }
+
   static Future<void> showUpdate(String version, String summary) => _plugin.show(
         777,
         'TaskOra $version is ready',

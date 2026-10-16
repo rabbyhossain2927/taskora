@@ -1,13 +1,17 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../services/backup_service.dart';
+import '../services/file_service.dart';
 import '../services/prefs.dart';
 import '../services/store.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
-/// Live sync status + automatic backups to Google Drive and phone storage.
+/// Sync status, full backups (phone + Google Drive), restore, and storage use.
 class BackupScreen extends StatefulWidget {
   const BackupScreen({super.key});
   @override
@@ -15,8 +19,9 @@ class BackupScreen extends StatefulWidget {
 }
 
 class _BackupScreenState extends State<BackupScreen> {
-  bool busyDrive = false, busyLocal = false, loading = true;
+  bool busyDrive = false, busyLocal = false, loadingDrive = true;
   List<BackupEntry> local = [], drive = [];
+  (int, int)? storage;
 
   @override
   void initState() {
@@ -25,53 +30,50 @@ class _BackupScreenState extends State<BackupScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => loading = true);
     try {
       local = await BackupService.listLocal();
     } catch (_) {}
+    if (mounted) setState(() {});
     try {
-      drive = await BackupService.listDrive();
+      if (Prefs.instance.driveAuto) drive = await BackupService.listDrive();
     } catch (_) {}
-    if (mounted) setState(() => loading = false);
-  }
-
-  String _ago(int ms) {
-    if (ms == 0) return 'Never';
-    final d = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ms));
-    if (d.inMinutes < 1) return 'Just now';
-    if (d.inHours < 1) return '${d.inMinutes} min ago';
-    if (d.inDays < 1) return '${d.inHours} h ago';
-    return '${d.inDays} days ago';
-  }
-
-  Future<void> _run(bool toDrive) async {
-    final s = context.read<Store>();
-    setState(() {
-      if (toDrive) {
-        busyDrive = true;
-      } else {
-        busyLocal = true;
-      }
-    });
     try {
-      if (toDrive) {
-        final ok = await BackupService.backupDrive(s);
-        if (mounted) toast(context, ok ? 'Backed up to Google Drive' : 'Google Drive wasn’t connected');
-      } else {
-        await BackupService.backupLocal(s);
-        if (mounted) toast(context, 'Saved to phone storage');
-      }
-      await s.addNotice('Backup complete', toDrive ? 'Saved to Google Drive.' : 'Saved to phone storage.', 'backup');
+      storage = await FileService.usage();
+    } catch (_) {}
+    if (mounted) setState(() => loadingDrive = false);
+  }
+
+  String _when(int ms) {
+    if (ms == 0) return 'Never';
+    final d = DateTime.fromMillisecondsSinceEpoch(ms);
+    final now = DateTime.now();
+    final sameDay = d.year == now.year && d.month == now.month && d.day == now.day;
+    return sameDay ? 'Today at ${DateFormat('h:mm a').format(d)}' : DateFormat('d MMM, h:mm a').format(d);
+  }
+
+  Future<void> _backupLocal() async {
+    setState(() => busyLocal = true);
+    try {
+      await BackupService.backupLocal(context.read<Store>());
+      if (mounted) toast(context, 'Backup saved on this phone');
     } catch (e) {
       if (mounted) toast(context, 'Backup failed: $e');
     } finally {
-      if (mounted) {
-        setState(() {
-          busyDrive = false;
-          busyLocal = false;
-        });
-        _load();
-      }
+      if (mounted) setState(() => busyLocal = false);
+      _load();
+    }
+  }
+
+  Future<void> _backupDrive() async {
+    setState(() => busyDrive = true);
+    try {
+      final ok = await BackupService.backupDrive(context.read<Store>());
+      if (mounted) toast(context, ok ? 'Backed up to Google Drive' : 'Google Drive wasn’t connected');
+    } catch (e) {
+      if (mounted) toast(context, BackupService.friendlyDriveError(e));
+    } finally {
+      if (mounted) setState(() => busyDrive = false);
+      _load();
     }
   }
 
@@ -80,7 +82,7 @@ class _BackupScreenState extends State<BackupScreen> {
       context: context,
       builder: (d) => AlertDialog(
         title: const Text('Restore this backup?'),
-        content: Text('${e.name}\n\nItems in the backup replace items with the same id. Everything else stays.'),
+        content: Text('${DateFormat('d MMM y, h:mm a').format(e.time.toLocal())}\n\nItems in the backup replace items with the same name. Everything else stays.'),
         actions: [TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Cancel')), TextButton(onPressed: () => Navigator.pop(d, true), child: const Text('Restore'))],
       ),
     );
@@ -90,7 +92,19 @@ class _BackupScreenState extends State<BackupScreen> {
       final n = e.onDrive ? await BackupService.restoreDrive(s, e.id) : await BackupService.restoreLocal(s, e.id);
       if (mounted) toast(context, 'Restored $n items');
     } catch (err) {
-      if (mounted) toast(context, 'Restore failed: $err');
+      if (mounted) toast(context, e.onDrive ? BackupService.friendlyDriveError(err) : 'Restore failed: $err');
+    }
+  }
+
+  Future<void> _restoreFromFile() async {
+    final r = await FilePicker.platform.pickFiles(type: FileType.any);
+    final path = r?.files.single.path;
+    if (path == null || !mounted) return;
+    try {
+      final n = await BackupService.importFromText(context.read<Store>(), await File(path).readAsString());
+      if (mounted) toast(context, 'Restored $n items');
+    } catch (e) {
+      if (mounted) toast(context, 'That file is not a TaskOra backup.');
     }
   }
 
@@ -98,7 +112,13 @@ class _BackupScreenState extends State<BackupScreen> {
   Widget build(BuildContext context) {
     final p = context.watch<Prefs>();
     final s = context.watch<Store>();
-    final all = [...drive, ...local]..sort((a, b) => b.time.compareTo(a.time));
+    final err = s.syncError != null;
+    final (statusText, statusIcon, statusColor) = err
+        ? ('Can’t reach the server', Icons.cloud_off_rounded, C.red)
+        : s.hasPendingWrites
+            ? ('${s.pendingCount} changes waiting', Icons.cloud_upload_rounded, const Color(0xFFD48806))
+            : ('Everything is synced', Icons.cloud_done_rounded, context.accent);
+
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
@@ -111,103 +131,164 @@ class _BackupScreenState extends State<BackupScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Box(
-                  color: s.syncError != null ? C.redBg : (s.hasPendingWrites ? C.amberBg : C.greenBg),
-                  child: Row(children: [
-                    s.syncing
-                        ? const SizedBox(width: 30, height: 30, child: CircularProgressIndicator(strokeWidth: 3))
-                        : Icon(s.syncError != null ? Icons.cloud_off_outlined : (s.hasPendingWrites ? Icons.cloud_upload_outlined : Icons.cloud_done_outlined),
-                            color: s.syncError != null ? C.red : (s.hasPendingWrites ? C.amber : C.green), size: 30),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(s.syncError != null ? 'Can’t reach your server' : (s.hasPendingWrites ? '${s.pendingCount} changes waiting' : 'Synced with your server'),
-                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: C.ink)),
-                        Text(
-                            s.syncError ??
-                                (s.lastSyncedAt == null ? 'Not synced yet.' : 'Last synced ${_ago(s.lastSyncedAt!.millisecondsSinceEpoch)} · checks every minute'),
-                            style: const TextStyle(color: Color(0xFF3F3F4A), fontSize: 13, height: 1.4)),
+                // ---------- status ----------
+                FadeIn(
+                  child: Box(
+                    padding: const EdgeInsets.fromLTRB(18, 22, 18, 16),
+                    radius: 26,
+                    child: Column(children: [
+                      Container(
+                        width: 76,
+                        height: 76,
+                        decoration: BoxDecoration(color: statusColor.withOpacity(0.12), shape: BoxShape.circle),
+                        child: s.syncing ? Padding(padding: const EdgeInsets.all(22), child: CircularProgressIndicator(strokeWidth: 3, color: statusColor)) : Icon(statusIcon, color: statusColor, size: 36),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(statusText, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      Text(FirebaseAuth.instance.currentUser?.email ?? '', style: TextStyle(color: context.mutedText, fontSize: 13)),
+                      if (err) Padding(padding: const EdgeInsets.only(top: 6), child: Text(s.syncError!, textAlign: TextAlign.center, style: const TextStyle(color: C.red, fontSize: 12.5))),
+                      const SizedBox(height: 16),
+                      Row(children: [
+                        _count(context, '${s.projects.length}', 'Projects'),
+                        _count(context, '${s.todos.length}', 'To-dos'),
+                        _count(context, '${s.notes.length}', 'Notes'),
                       ]),
-                    ),
-                    TextButton(onPressed: s.syncing ? null : () => syncNow(context), child: const Text('Sync')),
-                  ]),
-                ),
-                const Label('Automatic backups'),
-                _card(
-                  icon: Icons.add_to_drive_rounded,
-                  color: 12,
-                  title: 'Google Drive',
-                  sub: 'Private app folder in your Drive',
-                  auto: p.driveAuto,
-                  setAuto: (v) => p.driveAuto = v,
-                  freq: p.driveFreq,
-                  setFreq: (v) => p.driveFreq = v,
-                  last: _ago(p.lastDrive),
-                  busy: busyDrive,
-                  onRun: () => _run(true),
-                ),
-                const SizedBox(height: 10),
-                _card(
-                  icon: Icons.phone_android_rounded,
-                  color: 8,
-                  title: 'Phone storage',
-                  sub: 'Saved on this phone',
-                  auto: p.localAuto,
-                  setAuto: (v) => p.localAuto = v,
-                  freq: p.localFreq,
-                  setFreq: (v) => p.localFreq = v,
-                  last: _ago(p.lastLocal),
-                  busy: busyLocal,
-                  onRun: () => _run(false),
-                ),
-                Label('Restore', trailing: loading ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)) : null),
-                Box(
-                  padding: EdgeInsets.zero,
-                  child: all.isEmpty
-                      ? Padding(padding: const EdgeInsets.all(16), child: Text('No backups yet.', style: TextStyle(color: context.mutedText)))
-                      : Column(children: [
-                          for (final e in all.take(12))
-                            ListTile(
-                              leading: Icon(e.onDrive ? Icons.add_to_drive_rounded : Icons.phone_android_rounded, color: pastel(e.onDrive ? 12 : 8).fg),
-                              title: Text(dTime.format(e.time.toLocal()), style: const TextStyle(fontWeight: FontWeight.w700)),
-                              subtitle: Text('${e.onDrive ? 'Google Drive' : 'Phone'} · ${(e.size / 1024).toStringAsFixed(1)} KB'),
-                              trailing: TextButton(onPressed: () => _restore(e), child: const Text('Restore')),
-                            ),
-                        ]),
-                ),
-                const Label('Move your data'),
-                Row(children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50), shape: const StadiumBorder()),
-                      onPressed: () => BackupService.exportAndShare(s),
-                      icon: const Icon(Icons.ios_share_rounded),
-                      label: const Text('Export'),
-                    ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: s.syncing ? null : () => syncNow(context),
+                        icon: const Icon(Icons.sync_rounded),
+                        label: Text(s.syncing ? 'Syncing…' : 'Sync now'),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(s.lastSyncedAt == null ? 'Not synced yet' : 'Last synced ${_when(s.lastSyncedAt!.millisecondsSinceEpoch)}', style: TextStyle(color: context.mutedText, fontSize: 12.5)),
+                    ]),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50), shape: const StadiumBorder()),
-                      onPressed: () async {
-                        final data = await Clipboard.getData('text/plain');
-                        final text = data?.text ?? '';
-                        if (text.trim().isEmpty) {
-                          if (context.mounted) toast(context, 'Copy the backup file’s text first, then tap Import.');
-                          return;
-                        }
-                        try {
-                          final n = await BackupService.importFromText(s, text);
-                          if (context.mounted) toast(context, 'Imported $n items');
-                        } catch (e) {
-                          if (context.mounted) toast(context, 'Not a TaskOra backup');
-                        }
-                      },
-                      icon: const Icon(Icons.content_paste_rounded),
-                      label: const Text('Import'),
-                    ),
+                ),
+
+                // ---------- full backup ----------
+                const Label('Full backup'),
+                FadeIn(
+                  index: 1,
+                  child: Box(
+                    padding: EdgeInsets.zero,
+                    child: Column(children: [
+                      RowTile(
+                        icon: Icons.download_rounded,
+                        color: 0,
+                        title: 'Back up now',
+                        subtitle: 'Everything, saved on this phone',
+                        trailing: busyLocal ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
+                        onTap: busyLocal ? null : _backupLocal,
+                      ),
+                      const Divider(),
+                      DropdownTile<String>(
+                        icon: Icons.schedule_rounded,
+                        color: 12,
+                        title: 'Automatic backup',
+                        subtitle: 'Last: ${_when(p.lastLocal)}',
+                        value: p.localAuto ? p.localFreq : 'Off',
+                        options: const [('Daily', 'Every day'), ('Weekly', 'Every week'), ('Monthly', 'Every month'), ('Off', 'Off')],
+                        onChanged: (v) {
+                          if (v == 'Off') {
+                            p.localAuto = false;
+                          } else {
+                            p.localAuto = true;
+                            p.localFreq = v;
+                          }
+                        },
+                      ),
+                      const Divider(),
+                      RowTile(icon: Icons.restore_page_outlined, color: 8, title: 'Restore from a file', subtitle: 'Pick a TaskOra backup (.json)', onTap: _restoreFromFile),
+                    ]),
                   ),
-                ]),
+                ),
+
+                // ---------- google drive ----------
+                const Label('Google Drive'),
+                FadeIn(
+                  index: 2,
+                  child: Box(
+                    padding: EdgeInsets.zero,
+                    child: Column(children: [
+                      RowTile(
+                        icon: Icons.add_to_drive_rounded,
+                        color: 12,
+                        title: 'Back up to Google Drive',
+                        subtitle: 'Private app folder · last: ${_when(p.lastDrive)}',
+                        trailing: Switch(value: p.driveAuto, onChanged: (v) => p.driveAuto = v),
+                      ),
+                      if (p.driveAuto) ...[
+                        const Divider(),
+                        DropdownTile<String>(
+                          icon: Icons.schedule_rounded,
+                          color: 12,
+                          title: 'How often',
+                          value: p.driveFreq,
+                          options: const [('Daily', 'Every day'), ('Weekly', 'Every week'), ('Monthly', 'Every month')],
+                          onChanged: (v) => p.driveFreq = v,
+                        ),
+                      ],
+                      const Divider(),
+                      RowTile(
+                        icon: Icons.cloud_upload_outlined,
+                        color: 10,
+                        title: 'Back up to Drive now',
+                        trailing: busyDrive ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
+                        onTap: busyDrive ? null : _backupDrive,
+                      ),
+                    ]),
+                  ),
+                ),
+
+                // ---------- lists ----------
+                Label('Backups on this phone · ${local.length} of ${p.keepBackups}'),
+                FadeIn(
+                  index: 3,
+                  child: Box(
+                    padding: EdgeInsets.zero,
+                    child: local.isEmpty
+                        ? Padding(padding: const EdgeInsets.all(16), child: Text('No backups yet.', style: TextStyle(color: context.mutedText)))
+                        : Column(children: [
+                            for (var i = 0; i < local.length; i++) ...[
+                              if (i > 0) const Divider(),
+                              _entry(local[i], latest: i == 0),
+                            ],
+                          ]),
+                  ),
+                ),
+                if (drive.isNotEmpty) ...[
+                  Label('On Google Drive · ${drive.length}'),
+                  Box(
+                    padding: EdgeInsets.zero,
+                    child: Column(children: [
+                      for (var i = 0; i < drive.length && i < 10; i++) ...[
+                        if (i > 0) const Divider(),
+                        _entry(drive[i], latest: i == 0),
+                      ],
+                    ]),
+                  ),
+                ],
+
+                // ---------- storage ----------
+                if (storage != null) ...[
+                  const Label('File storage'),
+                  Box(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        Text(FileService.sizeLabel(storage!.$1), style: const TextStyle(fontWeight: FontWeight.w700)),
+                        Text(' of ${FileService.sizeLabel(storage!.$2)} used', style: TextStyle(color: context.mutedText)),
+                      ]),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(5),
+                        child: LinearProgressIndicator(value: storage!.$2 == 0 ? 0 : storage!.$1 / storage!.$2, minHeight: 8, backgroundColor: context.tint),
+                      ),
+                      const SizedBox(height: 6),
+                      Text('Images and files you attach to projects and notes. Up to 30 MB each.', style: TextStyle(fontSize: 12, color: context.mutedText)),
+                    ]),
+                  ),
+                ],
               ]),
             ),
           ]),
@@ -216,45 +297,41 @@ class _BackupScreenState extends State<BackupScreen> {
     );
   }
 
-  Widget _card({
-    required IconData icon,
-    required int color,
-    required String title,
-    required String sub,
-    required bool auto,
-    required ValueChanged<bool> setAuto,
-    required String freq,
-    required ValueChanged<String> setFreq,
-    required String last,
-    required bool busy,
-    required VoidCallback onRun,
-  }) {
-    final c = pastel(color);
-    return Box(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [
-          Container(width: 44, height: 44, decoration: BoxDecoration(color: c.bg, borderRadius: BorderRadius.circular(14)), child: Icon(icon, color: c.fg)),
+  Widget _count(BuildContext context, String v, String l) => Expanded(
+        child: Column(children: [
+          Text(v, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+          Text(l, style: TextStyle(fontSize: 12, color: context.mutedText)),
+        ]),
+      );
+
+  Widget _entry(BackupEntry e, {bool latest = false}) => Padding(
+        padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+        child: Row(children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(color: latest ? context.tint : (context.isDark ? Colors.white10 : const Color(0xFFF1F1F5)), borderRadius: BorderRadius.circular(13)),
+            child: Icon(latest ? Icons.verified_rounded : (e.onDrive ? Icons.add_to_drive_rounded : Icons.inventory_2_outlined), color: latest ? context.accent : context.mutedText, size: 21),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5)),
-              Text(sub, style: TextStyle(color: context.mutedText, fontSize: 12.5)),
+              Text(DateFormat('EEE, d MMM y · h:mm a').format(e.time.toLocal()), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
+              Text('${(e.size / 1024).toStringAsFixed(0)} KB${latest ? ' · latest' : ''}', style: TextStyle(fontSize: 12, color: context.mutedText)),
             ]),
           ),
-          Switch(value: auto, onChanged: setAuto),
+          IconButton(tooltip: 'Restore', icon: Icon(Icons.settings_backup_restore_rounded, color: context.accent), onPressed: () => _restore(e)),
+          if (!e.onDrive) ...[
+            IconButton(tooltip: 'Share', icon: const Icon(Icons.ios_share_rounded), onPressed: () => BackupService.shareLocal(e.id)),
+            IconButton(
+              tooltip: 'Delete',
+              icon: const Icon(Icons.delete_outline_rounded, color: C.red),
+              onPressed: () async {
+                await BackupService.deleteLocal(e.id);
+                _load();
+              },
+            ),
+          ],
         ]),
-        const SizedBox(height: 12),
-        Segmented<String>(items: const [('Daily', 'Daily'), ('Weekly', 'Weekly'), ('Monthly', 'Monthly')], value: freq, onChanged: setFreq),
-        const SizedBox(height: 10),
-        Row(children: [
-          Expanded(child: Text('Last backup: $last', style: TextStyle(color: context.mutedText, fontSize: 13, fontWeight: FontWeight.w600))),
-          FilledButton.tonal(
-            style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
-            onPressed: busy ? null : onRun,
-            child: busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Back up now'),
-          ),
-        ]),
-      ]),
-    );
-  }
+      );
 }

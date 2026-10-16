@@ -73,6 +73,25 @@ class BackupService {
     return out;
   }
 
+  static Future<void> deleteLocal(String path) async {
+    try {
+      await File(path).delete();
+    } catch (_) {}
+  }
+
+  static Future<void> shareLocal(String path) => Share.shareXFiles([XFile(path, mimeType: 'application/json')], subject: 'TaskOra backup');
+
+  /// Turns Google's long error text into something short and useful.
+  static String friendlyDriveError(Object e) {
+    final t = e.toString();
+    if (t.contains('has not been used') || t.contains('is disabled') || t.contains('accessNotConfigured')) {
+      return 'Google Drive is switched off for this app. The owner needs to enable the Google Drive API in Google Cloud.';
+    }
+    if (t.contains('insufficient') || t.contains('403')) return 'Google Drive permission was not given. Try again and allow access.';
+    if (t.contains('SocketException') || t.contains('Failed host lookup')) return 'You’re offline.';
+    return 'Drive backup failed. Please try again later.';
+  }
+
   static Future<int> restoreLocal(Store store, String path) async =>
       store.importAll(jsonDecode(await File(path).readAsString()) as Map<String, dynamic>);
 

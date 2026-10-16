@@ -196,8 +196,11 @@ class Store extends ChangeNotifier {
   Future<void> saveSection(NoteSection s) async => _put('sections', s.id, s.toMap());
   Future<void> saveNotice(AppNotice n) async => _put('notices', n.id, n.toMap());
 
-  Future<void> addNotice(String title, String body, String kind) =>
-      saveNotice(AppNotice(id: newId(), title: title, body: body, kind: kind));
+  /// Adds to Notifications in the app and shows it in the phone's notification panel.
+  Future<void> addNotice(String title, String body, String kind) async {
+    await saveNotice(AppNotice(id: newId(), title: title, body: body, kind: kind));
+    if (kind != 'update') await NotifyService.showNotice(title, body); // updates have their own alert
+  }
 
   Future<void> markRead(Iterable<String> ids, [bool read = true]) async {
     for (final id in ids.toList()) {

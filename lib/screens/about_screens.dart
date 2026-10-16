@@ -22,7 +22,7 @@ class AboutScreen extends StatelessWidget {
                     const Logo(),
                     const SizedBox(height: 12),
                     Text.rich(TextSpan(children: [const TextSpan(text: 'Task'), TextSpan(text: 'Ora', style: TextStyle(color: context.accent))]),
-                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
                     FutureBuilder<AppVersion>(
                       future: UpdateService.current(),
                       builder: (_, s) => Text(s.hasData ? 'Version ${s.data!.version} (build ${s.data!.build})' : '', style: TextStyle(color: context.mutedText, fontSize: 13)),
@@ -39,14 +39,6 @@ class AboutScreen extends StatelessWidget {
                     RowTile(icon: Icons.description_outlined, color: 0, title: 'Terms & conditions', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LegalScreen()))),
                     const Divider(),
                     RowTile(icon: Icons.shield_outlined, color: 8, title: 'Privacy policy', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LegalScreen(privacy: true)))),
-                    const Divider(),
-                    RowTile(icon: Icons.auto_awesome, color: 6, title: 'What’s new', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WhatsNewScreen()))),
-                    const Divider(),
-                    RowTile(icon: Icons.verified_outlined, color: 10, title: 'License', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LicenseScreen()))),
-                    const Divider(),
-                    RowTile(icon: Icons.mail_outline, color: 12, title: 'Contact support', value: 'Email', onTap: () => launchUrl(Uri.parse('mailto:${Config.supportEmail}?subject=TaskOra%20support'))),
-                    const Divider(),
-                    RowTile(icon: Icons.code, color: 19, title: 'Open-source licences', onTap: () => showLicensePage(context: context, applicationName: 'TaskOra')),
                   ]),
                 ),
                 const SizedBox(height: 16),
@@ -94,7 +86,7 @@ class _LegalScreenState extends State<LegalScreen> {
                 Text('Last updated 16 October 2026', style: TextStyle(color: context.mutedText, fontSize: 12)),
                 for (final s in privacy ? policy : terms) ...[
                   const SizedBox(height: 16),
-                  Text(s.$1, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                  Text(s.$1, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 4),
                   Text(s.$2, style: const TextStyle(height: 1.6)),
                 ],
@@ -128,17 +120,17 @@ class _LicenseScreenState extends State<LicenseScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(color: C.greenBg, borderRadius: BorderRadius.circular(14)),
-                      child: const Text('● Active', style: TextStyle(color: C.green, fontWeight: FontWeight.w800, fontSize: 12)),
+                      child: const Text('● Active', style: TextStyle(color: C.green, fontWeight: FontWeight.w700, fontSize: 12)),
                     ),
                     const SizedBox(height: 12),
-                    const Text('Lifetime', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800)),
+                    const Text('Lifetime', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w700)),
                     const Text('Pay once. All updates included.', style: TextStyle(color: Colors.white70)),
                     const SizedBox(height: 14),
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(14)),
-                      child: Text(show ? 'TKORA-FREE-EARLY-ACCESS' : 'TKORA-••••-••••-ACCESS', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: 1.4)),
+                      child: Text(show ? 'TKORA-FREE-EARLY-ACCESS' : 'TKORA-••••-••••-ACCESS', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, letterSpacing: 1.4)),
                     ),
                     TextButton(onPressed: () => setState(() => show = !show), child: Text(show ? 'Hide key' : 'Show full key', style: const TextStyle(color: Colors.white, decoration: TextDecoration.underline))),
                   ]),
@@ -146,7 +138,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
                 const SizedBox(height: 14),
                 Box(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    const Text('Have a new key?', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                    const Text('Have a new key?', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                     const SizedBox(height: 10),
                     Row(children: [
                       const Expanded(child: TextField(decoration: InputDecoration(hintText: 'TKORA-XXXX-XXXX-XXXX'))),
@@ -208,7 +200,7 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
                         decoration: BoxDecoration(color: context.accent, borderRadius: BorderRadius.circular(24)),
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           if (list[sel].published != null) Text(dLong.format(list[sel].published!.toLocal()), style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                          Text('Version ${list[sel].version}', style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
+                          Text('Version ${list[sel].version}', style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700)),
                           if (list[sel].summary.isNotEmpty) Text(list[sel].summary, style: const TextStyle(color: Colors.white70)),
                         ]),
                       ),
@@ -231,7 +223,7 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
         child: Row(children: [
           Container(width: 28, height: 28, decoration: BoxDecoration(color: p.bg, borderRadius: BorderRadius.circular(9)), child: Icon(icon, size: 15, color: p.fg)),
           const SizedBox(width: 8),
-          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(width: 6),
           Text('${items.length}', style: TextStyle(color: context.mutedText, fontWeight: FontWeight.w700)),
         ]),
