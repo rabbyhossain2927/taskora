@@ -63,12 +63,28 @@ jobs:
             echo "::warning::No KEYSTORE_BASE64 secret - test build with a temporary key (not published)."
             exit 0
           fi
-          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+          # Phone copy-paste often adds spaces or line breaks: strip them.
+          clean() { printf %s "$1" | tr -d ' \r\n\t'; }
+          SP="$(clean "$KEYSTORE_PASSWORD")"; KP="$(clean "$KEY_PASSWORD")"; KA="$(clean "$KEY_ALIAS")"
+          if ! clean "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks 2>/dev/null; then
+            echo "::error::KEYSTORE_BASE64 is not valid. Copy the whole long line again from TaskOra-signing-secrets.txt."
+            exit 1
+          fi
+          if ! keytool -list -keystore android/app/upload-keystore.jks -storepass "$SP" >/dev/null 2>&1; then
+            echo "::error::KEYSTORE_PASSWORD does not open the key (or KEYSTORE_BASE64 was cut short)."
+            exit 1
+          fi
+          if ! keytool -list -keystore android/app/upload-keystore.jks -storepass "$SP" -alias "$KA" >/dev/null 2>&1; then
+            echo "::error::KEY_ALIAS is wrong. It should be: taskora"
+            exit 1
+          fi
+          SHA1=$(keytool -list -v -keystore android/app/upload-keystore.jks -storepass "$SP" -alias "$KA" | grep -m1 "SHA1:" | sed 's/.*SHA1: //')
+          echo "::notice::Signing key OK. SHA-1 $SHA1 (this must match Firebase)."
           {
             echo "storeFile=upload-keystore.jks"
-            echo "storePassword=$KEYSTORE_PASSWORD"
-            echo "keyAlias=$KEY_ALIAS"
-            echo "keyPassword=$KEY_PASSWORD"
+            echo "storePassword=$SP"
+            echo "keyAlias=$KA"
+            echo "keyPassword=$KP"
           } > android/key.properties
 
       - name: Work out the version
@@ -84,7 +100,14 @@ jobs:
       - run: flutter pub get
 
       - name: Build APK
-        run: flutter build apk --release --build-name="${{ steps.ver.outputs.version }}" --build-number="${{ github.run_number }}"
+        run: |
+          set -o pipefail
+          if ! flutter build apk --release --build-name="${{ steps.ver.outputs.version }}" --build-number="${{ github.run_number }}" 2>&1 | tee build.log; then
+            # Show the important lines as annotations on the run page
+            grep -E "error:|Error:|FAILURE|What went wrong|Execution failed|Keystore|password|was tampered" build.log | head -25 | while IFS= read -r l; do echo "::error::$l"; done
+            grep -A6 "What went wrong" build.log | head -14 | tr '\n' ' ' | sed 's/^/::error::/' ; echo
+            exit 1
+          fi
 
       - name: Name the APK
         run: cp build/app/outputs/flutter-apk/app-release.apk "TaskOra-v${{ steps.ver.outputs.version }}.apk"
