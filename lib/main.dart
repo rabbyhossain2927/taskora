@@ -20,42 +20,67 @@ Future<void> main() async {
     await NotifyService.init();
   } catch (_) {}
   NotifyService.onOpenUpdate = () => NotifyService.navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const UpdateScreen()));
-  runApp(ChangeNotifierProvider.value(value: Prefs.instance, child: const TaskOraApp()));
+  runApp(MultiProvider(
+    providers: [
+      ChangeNotifierProvider.value(value: Prefs.instance),
+      ChangeNotifierProvider(create: (_) => AuthState(), lazy: false),
+    ],
+    child: const TaskOraApp(),
+  ));
+}
+
+/// Who is signed in. Listens to Firebase once for the whole app.
+class AuthState extends ChangeNotifier {
+  User? user;
+  bool ready = false;
+  AuthState() {
+    FirebaseAuth.instance.userChanges().listen((u) {
+      user = u;
+      ready = true;
+      notifyListeners();
+    });
+  }
 }
 
 class TaskOraApp extends StatelessWidget {
   const TaskOraApp({super.key});
-  static final _authChanges = FirebaseAuth.instance.userChanges();
+
   @override
   Widget build(BuildContext context) {
     final prefs = context.watch<Prefs>();
+    final user = context.watch<AuthState>().user;
     final t = appThemes[prefs.themeIndex.clamp(0, appThemes.length - 1)];
-    // The Store sits above MaterialApp so every pushed page can read it.
-    return StreamBuilder<User?>(
-      stream: _authChanges,
-      builder: (context, snap) {
-        final waiting = snap.connectionState == ConnectionState.waiting && !snap.hasData;
-        final user = snap.data;
-        final app = MaterialApp(
-          title: 'TaskOra',
-          debugShowCheckedModeBanner: false,
-          navigatorKey: NotifyService.navigatorKey,
-          theme: buildTheme(t, Brightness.light),
-          darkTheme: buildTheme(t, Brightness.dark),
-          themeMode: prefs.mode,
-          home: waiting
-              ? const Scaffold(body: Center(child: CircularProgressIndicator()))
-              : user == null
-                  ? const WelcomeScreen()
-                  : Shell(key: ValueKey(user.uid)),
-        );
-        if (user == null) return app;
-        return ChangeNotifierProvider<Store>(
-          key: ValueKey(user.uid),
-          create: (_) => Store(user.uid),
-          child: app,
-        );
-      },
+    // MaterialApp is built once and never replaced (replacing it froze the
+    // screen after sign-in). The Store is added around the navigator through
+    // `builder`, so every page can read it.
+    return MaterialApp(
+      title: 'TaskOra',
+      debugShowCheckedModeBanner: false,
+      navigatorKey: NotifyService.navigatorKey,
+      theme: buildTheme(t, Brightness.light),
+      darkTheme: buildTheme(t, Brightness.dark),
+      themeMode: prefs.mode,
+      builder: (context, child) => user == null
+          ? child!
+          : ChangeNotifierProvider<Store>(
+              key: ValueKey(user.uid),
+              create: (_) => Store(user.uid),
+              child: child!,
+            ),
+      home: const AuthGate(),
     );
+  }
+}
+
+/// The first page: loading, Welcome, or the app — and it updates live.
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthState>();
+    if (!auth.ready) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    final user = auth.user;
+    if (user == null) return const WelcomeScreen();
+    return Shell(key: ValueKey(user.uid));
   }
 }
