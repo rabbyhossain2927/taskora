@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../icons.dart';
 import '../models.dart';
+import '../services/import_service.dart';
 import '../services/prefs.dart';
 import '../services/store.dart';
 import '../theme.dart';
@@ -14,7 +15,25 @@ Future<void> deleteNotes(BuildContext context, List<String> ids) async {
   final m = ScaffoldMessenger.of(context);
   final undo = await s.deleteDocs('notes', ids);
   m.hideCurrentSnackBar();
-  m.showSnackBar(SnackBar(content: Text(ids.length == 1 ? 'Note deleted' : '${ids.length} notes deleted'), duration: const Duration(seconds: 5), action: SnackBarAction(label: 'Undo', onPressed: () => undo())));
+  m.showSnackBar(SnackBar(content: Text(ids.length == 1 ? 'Note moved to Trash' : '${ids.length} notes moved to Trash'), duration: const Duration(seconds: 5), action: SnackBarAction(label: 'Undo', onPressed: () => undo())));
+}
+
+Future<void> archiveNotes(BuildContext context, List<String> ids) async {
+  final s = context.read<Store>();
+  await s.archive('notes', ids);
+  if (context.mounted) showUndo(context, ids.length == 1 ? 'Note archived' : '${ids.length} notes archived', () => s.archive('notes', ids, false));
+}
+
+/// Pick Word / Google Docs / text files and turn each into a note.
+Future<void> importNotes(BuildContext context, {String? folderId}) async {
+  final s = context.read<Store>();
+  final m = ScaffoldMessenger.of(context);
+  try {
+    final n = await ImportService.pickAndImport(s, folderId: folderId);
+    if (n > 0) m.showSnackBar(SnackBar(content: Text(n == 1 ? '1 document added as a note' : '$n documents added as notes')));
+  } catch (e) {
+    m.showSnackBar(SnackBar(content: Text(e.toString())));
+  }
 }
 
 /// Ask which folder; returns '' for "No folder", null if cancelled.
@@ -52,7 +71,8 @@ void showNoteActions(BuildContext context, Note n, {VoidCallback? onSelect}) {
       s.saveNote(copy);
     }),
     if (onSelect != null) ActionItem(Icons.checklist_rounded, 'Select several', onSelect),
-    ActionItem(Icons.delete_outline_rounded, 'Delete', () => deleteNotes(context, [n.id]), danger: true),
+    ActionItem(Icons.archive_outlined, 'Archive', () => archiveNotes(context, [n.id])),
+    ActionItem(Icons.delete_outline_rounded, 'Move to Trash', () => deleteNotes(context, [n.id]), danger: true),
   ]);
 }
 
@@ -139,7 +159,17 @@ class NotesSelectBar extends StatelessWidget {
                   },
           ),
           IconButton(
-            tooltip: 'Delete',
+            tooltip: 'Archive',
+            icon: const Icon(Icons.archive_outlined),
+            onPressed: picked.isEmpty
+                ? null
+                : () {
+                    archiveNotes(context, picked.toList());
+                    onDone();
+                  },
+          ),
+          IconButton(
+            tooltip: 'Move to Trash',
             icon: const Icon(Icons.delete_outline_rounded, color: C.red),
             onPressed: picked.isEmpty
                 ? null
@@ -196,6 +226,7 @@ class _NotesScreenState extends State<NotesScreen> {
               if (selecting)
                 TextButton(onPressed: _stop, child: const Text('Cancel'))
               else ...[
+                RoundButton(icon: Icons.upload_file_rounded, tooltip: 'Import Word, Google Docs or text files', onTap: () => importNotes(context)),
                 RoundButton(icon: prefs.notesGrid ? Icons.view_agenda_outlined : Icons.grid_view_rounded, tooltip: prefs.notesGrid ? 'List view' : 'Grid view', onTap: () => prefs.notesGrid = !prefs.notesGrid),
               ],
             ]),
@@ -222,7 +253,7 @@ class _NotesScreenState extends State<NotesScreen> {
                   )),
                   if (s.sections.isEmpty)
                     Box(padding: const EdgeInsets.all(16), child: Text('Group notes in folders, like “Client briefs” or “Ideas”. A folder can be pinned to Home.', style: TextStyle(color: context.mutedText, height: 1.5)))
-                  else
+                  else if (prefs.notesGrid)
                     GridView.count(
                       crossAxisCount: 2,
                       shrinkWrap: true,
@@ -231,6 +262,16 @@ class _NotesScreenState extends State<NotesScreen> {
                       crossAxisSpacing: 10,
                       childAspectRatio: 1.7,
                       children: [for (var i = 0; i < s.sections.length; i++) FadeIn(index: i, child: _FolderCard(f: s.sections[i], count: s.notes.where((n) => n.sectionId == s.sections[i].id).length, color: i))],
+                    )
+                  else
+                    Box(
+                      padding: EdgeInsets.zero,
+                      child: Column(children: [
+                        for (var i = 0; i < s.sections.length; i++) ...[
+                          if (i > 0) const Divider(),
+                          FadeIn(index: i, child: _FolderRow(f: s.sections[i], count: s.notes.where((n) => n.sectionId == s.sections[i].id).length, color: i)),
+                        ],
+                      ]),
                     ),
                 ],
                 Label(filtering ? 'Results · ${loose.length}' : 'Notes · ${loose.length}'),
@@ -274,6 +315,31 @@ class _FolderCard extends StatelessWidget {
   }
 }
 
+class _FolderRow extends StatelessWidget {
+  final NoteSection f;
+  final int count;
+  final int color;
+  const _FolderRow({required this.f, required this.count, required this.color});
+  @override
+  Widget build(BuildContext context) {
+    final p = pastel((color * 3 + 2) % pastels.length);
+    return InkWell(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FolderScreen(id: f.id))),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        child: Row(children: [
+          Container(width: 38, height: 38, decoration: BoxDecoration(color: context.isDark ? p.fg.withOpacity(0.25) : p.bg, borderRadius: BorderRadius.circular(12)), child: Icon(Icons.folder_rounded, size: 21, color: context.isDark ? Colors.white : p.fg)),
+          const SizedBox(width: 12),
+          Expanded(child: Text(f.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5))),
+          if (f.onHome) Padding(padding: const EdgeInsets.only(right: 6), child: Icon(Icons.home_rounded, size: 16, color: context.mutedText)),
+          Text('$count', style: TextStyle(color: context.mutedText, fontWeight: FontWeight.w600)),
+          Icon(Icons.chevron_right_rounded, color: context.mutedText),
+        ]),
+      ),
+    );
+  }
+}
+
 /// One folder: its notes, plus rename / show on Home / delete.
 class FolderScreen extends StatefulWidget {
   final String id;
@@ -289,6 +355,7 @@ class _FolderScreenState extends State<FolderScreen> {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<Store>();
+    final prefs = context.watch<Prefs>();
     final f = s.sections.where((x) => x.id == widget.id).firstOrNull;
     if (f == null) return Scaffold(body: SafeArea(child: Column(children: const [Header('Folder'), EmptyState(icon: Icons.folder_off_outlined, title: 'Folder removed', body: '')])));
     final notes = s.notes.where((n) => n.sectionId == f.id).toList();
@@ -296,6 +363,7 @@ class _FolderScreenState extends State<FolderScreen> {
       body: SafeArea(
         child: ListView(padding: const EdgeInsets.only(bottom: 120), children: [
           Header(f.title, actions: [
+            RoundButton(icon: prefs.notesGrid ? Icons.view_agenda_outlined : Icons.grid_view_rounded, tooltip: prefs.notesGrid ? 'List view' : 'Grid view', onTap: () => prefs.notesGrid = !prefs.notesGrid),
             RoundButton(icon: Icons.note_add_outlined, tooltip: 'New note here', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditor(sectionId: f.id), fullscreenDialog: true))),
             RoundButton(
               icon: Icons.more_horiz_rounded,
@@ -312,6 +380,7 @@ class _FolderScreenState extends State<FolderScreen> {
                     s.saveSection(f);
                   }
                 }),
+                ActionItem(Icons.upload_file_rounded, 'Import documents here', () => importNotes(context, folderId: f.id)),
                 ActionItem(Icons.checklist_rounded, 'Select notes', () => setState(() => selecting = true)),
                 ActionItem(Icons.delete_outline_rounded, 'Delete folder (keep notes)', () async {
                   final m = ScaffoldMessenger.of(context);
@@ -427,6 +496,10 @@ class NoteCard extends StatelessWidget {
                         Text('${n.tabs.length} tabs', style: TextStyle(fontSize: 11.5, color: ink?.withOpacity(0.6) ?? context.mutedText)),
                       ]),
                     ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text('Edited ${fmtStamp(n.updatedAt)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: ink?.withOpacity(0.55) ?? context.mutedText)),
+                  ),
                   if (n.tags.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Wrap(spacing: 6, runSpacing: 4, children: [

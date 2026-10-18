@@ -64,6 +64,19 @@ class Prefs extends ChangeNotifier {
   bool get dailySummary => _get('dailySummary', false);
   set dailySummary(bool v) => _set('dailySummary', v);
 
+  bool get notificationsOn => _get('notificationsOn', true);
+  set notificationsOn(bool v) => _set('notificationsOn', v);
+  bool get focusAlerts => _get('focusAlerts', true);
+  set focusAlerts(bool v) => _set('focusAlerts', v);
+  bool get appNews => _get('appNews', true);
+  set appNews(bool v) => _set('appNews', v);
+  int get lastReminderScan => _get('lastReminderScan', 0);
+  set lastReminderScan(int v) => _p.setInt('lastReminderScan', v); // no rebuild needed
+
+  // Views
+  String get projectView => _get('projectView', 'grid'); // grid | list | board
+  set projectView(String v) => _set('projectView', v);
+
   // Focus & sync
   int get focusMinutes => _get('focusMinutes', 25);
   set focusMinutes(int v) => _set('focusMinutes', v);

@@ -250,7 +250,7 @@ class NoteBlock {
         'bullets' || 'check' => items.map((i) => i.title).join(' '),
         'dropdown' => '$text $body',
         'file' => file?.name ?? '',
-        _ => text,
+        _ => stripMarks(text),
       };
 }
 
@@ -278,22 +278,24 @@ class Note {
   List<NoteTab> tabs;
   bool pinned;
   DateTime updatedAt;
+  DateTime createdAt;
 
-  Note({required this.id, this.title = '', this.sectionId, this.color = 0, this.icon = 'note', List<String>? tags, List<NoteTab>? tabs, this.pinned = false, DateTime? updatedAt})
+  Note({required this.id, this.title = '', this.sectionId, this.color = 0, this.icon = 'note', List<String>? tags, List<NoteTab>? tabs, this.pinned = false, DateTime? updatedAt, DateTime? createdAt})
       : tags = tags ?? [],
         tabs = (tabs == null || tabs.isEmpty) ? [NoteTab(id: 't1', title: 'Main')] : tabs,
-        updatedAt = updatedAt ?? DateTime.now();
+        updatedAt = updatedAt ?? DateTime.now(),
+        createdAt = createdAt ?? updatedAt ?? DateTime.now();
 
   /// Blocks of the first tab (cards and previews use these).
   List<NoteBlock> get blocks => tabs.first.blocks;
   List<NoteBlock> get allBlocks => [for (final t in tabs) ...t.blocks];
-  String get preview => blocks.where((b) => b.type == 'text').map((b) => b.text).join(' ').trim();
+  String get preview => blocks.where((b) => b.type == 'text').map((b) => stripMarks(b.text)).join(' ').trim();
   String get allText => allBlocks.map((b) => b.plain).join(' ');
   Attachment? get firstImage => allBlocks.map((b) => b.file).whereType<Attachment>().where((f) => f.isImage).firstOrNull;
 
   Map<String, dynamic> toMap() => {
         'title': title, 'sectionId': sectionId, 'color': color, 'icon': icon, 'tags': tags,
-        'tabs': tabs.map((t) => t.toMap()).toList(), 'pinned': pinned, 'updatedAt': _t(updatedAt),
+        'tabs': tabs.map((t) => t.toMap()).toList(), 'pinned': pinned, 'updatedAt': _t(updatedAt), 'createdAt': _t(createdAt),
       };
 
   factory Note.fromMap(String id, Map<String, dynamic> m) {
@@ -313,6 +315,7 @@ class Note {
       tabs: tabs,
       pinned: m['pinned'] ?? false,
       updatedAt: _d(m['updatedAt']),
+      createdAt: _d(m['createdAt']) ?? _d(m['updatedAt']),
     );
   }
 }
@@ -349,3 +352,12 @@ dynamic fromJsonSafe(dynamic v) {
   if (v is List) return v.map(fromJsonSafe).toList();
   return v;
 }
+
+/// Note text uses light marks at the start of a line: "# " heading,
+/// "## " subheading, "-# " small text, and **bold** inside a line.
+/// This removes them for previews and search.
+String stripMarks(String s) => s
+    .split('\n')
+    .map((l) => l.replaceFirst(RegExp(r'^(#{1,2} |-# )'), ''))
+    .join('\n')
+    .replaceAll('**', '');

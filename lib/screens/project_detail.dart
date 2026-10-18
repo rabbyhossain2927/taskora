@@ -24,7 +24,7 @@ class _ProjectDetailState extends State<ProjectDetail> {
   Future<void> _pickDate(Project p, {required bool start}) async {
     final now = DateTime.now();
     final init = (start ? p.start : p.deadline) ?? now;
-    final d = await showDatePicker(context: context, initialDate: init, firstDate: DateTime(now.year - 5), lastDate: DateTime(now.year + 10));
+    final d = start ? await showDatePicker(context: context, initialDate: init, firstDate: DateTime(now.year - 5), lastDate: DateTime(now.year + 10)) : await pickDeadline(context, p.deadline);
     if (d == null || !mounted) return;
     if (start) {
       p.start = d;
@@ -205,7 +205,7 @@ class _ProjectDetailState extends State<ProjectDetail> {
                     Row(children: [
                       cell('Start', v(p.start == null ? 'Set' : dShort.format(p.start!)), () => _pickDate(p, start: true)),
                       const SizedBox(width: 10),
-                      cell('Deadline', v(p.deadline == null ? 'Set' : dShort.format(p.deadline!)), () => _pickDate(p, start: false)),
+                      cell('Deadline', v(p.deadline == null ? 'Set' : fmtDue(p.deadline!)), () => _pickDate(p, start: false)),
                       const SizedBox(width: 10),
                       cell('Priority', PriorityBadge(p.priority, showNone: true), () => pickProjectPriority(context, p)),
                     ]),

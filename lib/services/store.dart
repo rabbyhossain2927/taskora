@@ -7,9 +7,21 @@ import 'package:uuid/uuid.dart';
 import '../models.dart';
 import 'api.dart';
 import 'notify_service.dart';
+import 'prefs.dart';
 
 const _uuid = Uuid();
 String newId() => _uuid.v4();
+
+/// An item in Archive or Trash.
+class BinItem {
+  final String col; // projects | todos | notes
+  final String id;
+  final String title;
+  final DateTime when; // archived / deleted at
+  const BinItem(this.col, this.id, this.title, this.when);
+  String get key => '$col/$id';
+  String get kind => switch (col) { 'projects' => 'Project', 'todos' => 'To-do', _ => 'Note' };
+}
 
 /// All of the user's data.
 ///
@@ -29,7 +41,14 @@ class Store extends ChangeNotifier {
   List<Tag> statuses = List.of(defaultStatuses);
   List<Tag> projectCats = List.of(defaultProjectCats);
   List<Tag> todoCats = List.of(defaultTodoCats);
+  List<Project> allProjects = []; // including archived / trashed (for lookups)
+  List<BinItem> archived = [];
+  List<BinItem> trash = [];
   bool loaded = false;
+
+  /// Things in Trash are deleted for good after this long.
+  static const trashDays = 30;
+  static const binCols = ['projects', 'todos', 'notes'];
 
   // Sync state (shown on Backup & sync and the profile badge)
   bool syncing = false;
@@ -74,9 +93,22 @@ class Store extends ChangeNotifier {
     }
     loaded = true;
     _rebuild();
+    _emptyOldTrash();
+    unawaited(checkReminders());
     // First sync now, then every 60 seconds while the app is open.
     unawaited(syncQuietly());
-    _periodic = Timer.periodic(const Duration(seconds: 60), (_) => syncQuietly());
+    _periodic = Timer.periodic(const Duration(seconds: 60), (_) {
+      syncQuietly();
+      checkReminders();
+    });
+  }
+
+  /// Writes to the phone right now and starts a sync (used when the app is
+  /// closed or sent to the background, so nothing typed is lost).
+  Future<void> flush() async {
+    _saveTimer?.cancel();
+    await _writeFile();
+    unawaited(syncQuietly());
   }
 
   @override
@@ -112,10 +144,27 @@ class Store extends ChangeNotifier {
   }
 
   void _rebuild() {
+    bool live(Map m) => m['deletedAt'] == null && m['archived'] != true;
     List<T> all<T>(String col, T Function(String, Map<String, dynamic>) f) =>
-        (_data[col] ?? {}).entries.map((e) => f(e.key, e.value)).toList();
+        (_data[col] ?? {}).entries.where((e) => live(e.value)).map((e) => f(e.key, e.value)).toList();
     projects = all('projects', Project.fromMap)..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    allProjects = (_data['projects'] ?? {}).entries.map((e) => Project.fromMap(e.key, e.value)).toList();
     todos = all('todos', Todo.fromMap)..sort(_todoSort);
+    archived = [];
+    trash = [];
+    for (final col in binCols) {
+      (_data[col] ?? {}).forEach((id, m) {
+        final title = (m['title'] ?? '').toString();
+        if (m['deletedAt'] != null) {
+          // To-dos trashed together with their project are shown under the project.
+          if (m['trashedWith'] == null) trash.add(BinItem(col, id, title, DateTime.fromMillisecondsSinceEpoch(((m['deletedAt']) as num).toInt())));
+        } else if (m['archived'] == true) {
+          archived.add(BinItem(col, id, title, DateTime.fromMillisecondsSinceEpoch(((m['archivedAt'] ?? 0) as num).toInt())));
+        }
+      });
+    }
+    archived.sort((a, b) => b.when.compareTo(a.when));
+    trash.sort((a, b) => b.when.compareTo(a.when));
     notes = all('notes', Note.fromMap)
       ..sort((a, b) {
         if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
@@ -157,7 +206,7 @@ class Store extends ChangeNotifier {
   Map<String, dynamic>? _get(String col, String id) => _data[col]?[id];
 
   // ---------------- lookups ----------------
-  Project? project(String? id) => id == null ? null : projects.where((p) => p.id == id).firstOrNull;
+  Project? project(String? id) => id == null ? null : (projects.where((p) => p.id == id).firstOrNull ?? allProjects.where((p) => p.id == id).firstOrNull);
   Tag status(String key) => statuses.firstWhere((t) => t.key == key, orElse: () => statuses.first);
   Tag projectCat(String key) => projectCats.firstWhere((t) => t.key == key, orElse: () => projectCats.first);
   Tag todoCat(String key) => todoCats.firstWhere((t) => t.key == key, orElse: () => todoCats.first);
@@ -221,29 +270,152 @@ class Store extends ChangeNotifier {
   Future<void> saveTaxonomy(String field, List<Tag> list) => _saveMeta({field: list.map((e) => e.toMap()).toList()});
 
   /// Deletes items and returns a function that puts them back (for Undo).
+  /// Projects, to-dos and notes go to Trash (kept for 30 days).
   Future<Future<void> Function()> deleteDocs(String collection, Iterable<String> ids) async {
+    final list = ids.toList();
+    if (binCols.contains(collection)) {
+      await moveToTrash(collection, list);
+      return () => restore(collection, list);
+    }
     final saved = <String, Map<String, dynamic>>{};
-    final extra = <String, Map<String, dynamic>>{};
-    for (final id in ids.toList()) {
+    for (final id in list) {
       final m = _get(collection, id);
       if (m != null) saved[id] = Map<String, dynamic>.from(m);
       _put(collection, id, null, rebuild: false);
-      if (collection == 'todos' || collection == 'projects') await NotifyService.cancelFor(id);
-    }
-    // Deleting a project also removes its to-dos.
-    if (collection == 'projects') {
-      for (final t in todos.where((t) => saved.containsKey(t.projectId)).toList()) {
-        extra[t.id] = t.toMap();
-        _put('todos', t.id, null, rebuild: false);
-        await NotifyService.cancelFor(t.id);
-      }
     }
     _rebuild();
     return () async {
       saved.forEach((id, m) => _put(collection, id, m, rebuild: false));
-      extra.forEach((id, m) => _put('todos', id, m, rebuild: false));
       _rebuild();
     };
+  }
+
+  Future<void> _cancelReminder(String col, String id) async {
+    if (col == 'todos' || col == 'projects') await NotifyService.cancelFor(id);
+  }
+
+  Future<void> _rescheduleReminder(String col, String id) async {
+    final m = _get(col, id);
+    if (m == null) return;
+    if (col == 'projects') {
+      final p = Project.fromMap(id, m);
+      await NotifyService.scheduleFor(p.id, p.title, 'Project reminder', p.reminder);
+    } else if (col == 'todos') {
+      final t = Todo.fromMap(id, m);
+      await NotifyService.scheduleFor(t.id, t.title, 'To-do reminder', t.done ? null : t.reminder);
+    }
+  }
+
+  /// Moves items to Trash. A project takes its to-dos with it.
+  Future<void> moveToTrash(String col, List<String> ids) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    for (final id in ids) {
+      final m = _get(col, id);
+      if (m == null) continue;
+      _put(col, id, {...m, 'deletedAt': now}, rebuild: false);
+      await _cancelReminder(col, id);
+      if (col == 'projects') {
+        for (final e in (_data['todos'] ?? {}).entries.toList()) {
+          if (e.value['projectId'] == id && e.value['deletedAt'] == null) {
+            _put('todos', e.key, {...e.value, 'deletedAt': now, 'trashedWith': id}, rebuild: false);
+            await NotifyService.cancelFor(e.key);
+          }
+        }
+      }
+    }
+    _rebuild();
+  }
+
+  /// Archives (or un-archives) items. Archived items are hidden everywhere.
+  Future<void> archive(String col, List<String> ids, [bool on = true]) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    for (final id in ids) {
+      final m = _get(col, id);
+      if (m == null) continue;
+      final next = Map<String, dynamic>.from(m);
+      if (on) {
+        next['archived'] = true;
+        next['archivedAt'] = now;
+      } else {
+        next.remove('archived');
+        next.remove('archivedAt');
+      }
+      _put(col, id, next, rebuild: false);
+      if (on) {
+        await _cancelReminder(col, id);
+      } else {
+        await _rescheduleReminder(col, id);
+      }
+    }
+    _rebuild();
+  }
+
+  /// Puts items from Trash (or Archive) back where they were.
+  Future<void> restore(String col, List<String> ids) async {
+    for (final id in ids) {
+      final m = _get(col, id);
+      if (m == null) continue;
+      final next = Map<String, dynamic>.from(m)..remove('deletedAt')..remove('trashedWith')..remove('archived')..remove('archivedAt');
+      _put(col, id, next, rebuild: false);
+      await _rescheduleReminder(col, id);
+      if (col == 'projects') {
+        for (final e in (_data['todos'] ?? {}).entries.toList()) {
+          if (e.value['trashedWith'] == id) {
+            _put('todos', e.key, Map<String, dynamic>.from(e.value)..remove('deletedAt')..remove('trashedWith'), rebuild: false);
+            await _rescheduleReminder('todos', e.key);
+          }
+        }
+      }
+    }
+    _rebuild();
+  }
+
+  /// Deletes for good (from Trash or Archive).
+  Future<void> deleteForever(String col, List<String> ids) async {
+    for (final id in ids) {
+      _put(col, id, null, rebuild: false);
+      await _cancelReminder(col, id);
+      if (col == 'projects') {
+        for (final e in (_data['todos'] ?? {}).entries.toList()) {
+          if (e.value['trashedWith'] == id) _put('todos', e.key, null, rebuild: false);
+        }
+      }
+    }
+    _rebuild();
+  }
+
+  /// Things in Trash for more than 30 days are removed for good.
+  void _emptyOldTrash() {
+    final cutoff = DateTime.now().subtract(const Duration(days: trashDays)).millisecondsSinceEpoch;
+    var any = false;
+    for (final col in binCols) {
+      for (final e in (_data[col] ?? {}).entries.toList()) {
+        final d = e.value['deletedAt'];
+        if (d is num && d < cutoff) {
+          _put(col, e.key, null, rebuild: false);
+          any = true;
+        }
+      }
+    }
+    if (any) _rebuild();
+  }
+
+  /// Reminders that went off since the app last looked also show up in
+  /// the app's Notifications list (the phone already showed them).
+  Future<void> checkReminders() async {
+    final prefs = Prefs.instance;
+    final now = DateTime.now();
+    final last = prefs.lastReminderScan;
+    prefs.lastReminderScan = now.millisecondsSinceEpoch;
+    if (last == 0 || !prefs.remindersOn) return;
+    final from = DateTime.fromMillisecondsSinceEpoch(last);
+    bool due(DateTime? r) => r != null && r.isAfter(from) && !r.isAfter(now);
+    for (final t in todos.where((t) => !t.done && due(t.reminder))) {
+      await saveNotice(AppNotice(id: newId(), title: t.title.isEmpty ? 'Reminder' : t.title, body: 'To-do reminder', kind: 'reminder', createdAt: t.reminder));
+    }
+    for (final p in projects.where((p) => due(p.reminder))) {
+      await saveNotice(AppNotice(id: newId(), title: p.title.isEmpty ? 'Reminder' : p.title, body: 'Project reminder', kind: 'reminder', createdAt: p.reminder));
+    }
   }
 
   // ---------------- sync with your server ----------------

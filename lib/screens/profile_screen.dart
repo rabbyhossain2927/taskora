@@ -11,9 +11,11 @@ import '../widgets/common.dart';
 import 'about_screens.dart';
 import 'backup_screen.dart';
 import 'badges_screen.dart';
+import 'bin_screen.dart';
 import 'feedback_screen.dart';
 import 'howto_screen.dart';
 import 'notes_screen.dart';
+import 'notification_settings.dart';
 import 'taxonomy_screen.dart';
 import 'update_screen.dart';
 
@@ -104,7 +106,21 @@ class ProfileScreen extends StatelessWidget {
                     const Divider(),
                     RowTile(icon: Icons.palette_outlined, color: 2, title: 'Theme', value: appThemes[Prefs.instance.themeIndex.clamp(0, appThemes.length - 1)].name, onTap: () => _open(context, const ThemeScreen())),
                     const Divider(),
+                    RowTile(icon: Icons.notifications_none_rounded, color: 4, title: 'Notifications', subtitle: 'On / off, test notification', onTap: () => _open(context, const NotificationSettingsScreen())),
+                    const Divider(),
                     RowTile(icon: Icons.cloud_sync_outlined, color: 12, title: 'Backup & sync', onTap: () => _open(context, const BackupScreen())),
+                  ]),
+                ),
+              ),
+              const Label('Storage'),
+              FadeIn(
+                index: 4,
+                child: Box(
+                  padding: EdgeInsets.zero,
+                  child: Column(children: [
+                    RowTile(icon: Icons.archive_outlined, color: 10, title: 'Archive', value: s.archived.isEmpty ? null : '${s.archived.length}', onTap: () => _open(context, const BinScreen(trash: false))),
+                    const Divider(),
+                    RowTile(icon: Icons.delete_outline_rounded, color: 2, title: 'Trash', subtitle: 'Kept for ${Store.trashDays} days', value: s.trash.isEmpty ? null : '${s.trash.length}', onTap: () => _open(context, const BinScreen(trash: true))),
                   ]),
                 ),
               ),
@@ -375,8 +391,7 @@ class PreferencesScreen extends StatelessWidget {
                 _switch('Show pinned folders on Home', p.showNotesOnHome, (v) => p.showNotesOnHome = v, icon: Icons.home_outlined, color: 0),
               ]),
               group('Notifications', [
-                _switch('Reminders', p.remindersOn, (v) => p.remindersOn = v, sub: 'For to-dos and projects', icon: Icons.notifications_active_outlined, color: 4),
-                _switch('Update alerts', p.autoUpdateCheck, (v) => p.autoUpdateCheck = v, sub: 'When a new version is ready', icon: Icons.system_update_alt_rounded, color: 12),
+                RowTile(icon: Icons.notifications_active_outlined, color: 4, title: 'Notification settings', subtitle: 'On / off, reminders, focus, test', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationSettingsScreen()))),
               ]),
               group('Focus & backups', [
                 DropdownTile<int>(icon: Icons.timer_outlined, title: 'Focus length', value: p.focusMinutes, options: const [(15, '15 min'), (25, '25 min'), (45, '45 min'), (60, '60 min'), (90, '90 min')], onChanged: (v) => p.focusMinutes = v),

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -25,11 +26,15 @@ class _ProjectEditorState extends State<ProjectEditor> {
   bool money = false;
   final title = TextEditingController(), desc = TextEditingController(), amount = TextEditingController(), task = TextEditingController(), customFee = TextEditingController();
   final splits = <String>[];
+  late final Store store;
+  late String original;
+  bool closed = false;
 
   @override
   void initState() {
     super.initState();
     final s = context.read<Store>();
+    store = s;
     final existing = widget.id == null ? null : s.project(widget.id);
     isNew = existing == null;
     final prefs = Prefs.instance;
@@ -48,6 +53,23 @@ class _ProjectEditorState extends State<ProjectEditor> {
     money = (p.amount ?? 0) > 0;
     if (money) amount.text = p.amount!.toStringAsFixed(p.amount! == p.amount!.roundToDouble() ? 0 : 2);
     customFee.text = p.customFee.toStringAsFixed(0);
+    original = jsonEncode(p.toMap());
+  }
+
+  /// Going back saves your changes too (the button still works).
+  Future<void> _autoSave() async {
+    if (closed) return;
+    p.title = title.text.trim();
+    p.description = desc.text.trim();
+    if (p.title.isEmpty) return;
+    p.amount = money ? double.tryParse(amount.text.replaceAll(',', '')) : null;
+    p.customFee = double.tryParse(customFee.text) ?? 15;
+    if (p.done) p.status = 'complete';
+    if (jsonEncode(p.toMap()) == original && splits.isEmpty) return;
+    await store.saveProject(p);
+    for (final t in splits) {
+      await store.saveTodo(Todo(id: newId(), title: t, projectId: p.id, deadline: p.deadline, priority: p.priority, category: store.todoCats.first.key, start: p.start));
+    }
   }
 
   Future<void> _save() async {
@@ -62,6 +84,7 @@ class _ProjectEditorState extends State<ProjectEditor> {
     if (p.done) p.status = 'complete';
     final s = context.read<Store>();
     final m = ScaffoldMessenger.of(context);
+    closed = true;
     Navigator.pop(context);
     await s.saveProject(p);
     for (final t in splits) {
@@ -77,7 +100,11 @@ class _ProjectEditorState extends State<ProjectEditor> {
     final amt = double.tryParse(amount.text.replaceAll(',', '')) ?? 0;
     final pct = feePercent(p.platform, double.tryParse(customFee.text) ?? 15);
     final fee = amt * pct / 100;
-    return Scaffold(
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _autoSave();
+      },
+      child: Scaffold(
       body: SafeArea(
         child: Column(children: [
           Header(isNew ? 'New project' : 'Edit project'),
@@ -216,7 +243,7 @@ class _ProjectEditorState extends State<ProjectEditor> {
                 child: Column(children: [
                   DateRow(label: 'Start date', icon: Icons.play_circle_outline, value: p.start, onChanged: (d) => setState(() => p.start = d)),
                   const Divider(),
-                  DateRow(label: 'Deadline', icon: Icons.flag_outlined, value: p.deadline, onChanged: (d) => setState(() => p.deadline = d)),
+                  DateRow(label: 'Deadline', icon: Icons.flag_outlined, optionalTime: true, value: p.deadline, onChanged: (d) => setState(() => p.deadline = d)),
                   const Divider(),
                   DateRow(label: 'Reminder', icon: Icons.alarm, value: p.reminder, withTime: true, onChanged: (d) => setState(() => p.reminder = d)),
                   const Divider(),
@@ -284,6 +311,7 @@ class _ProjectEditorState extends State<ProjectEditor> {
             ),
           ),
         ]),
+      ),
       ),
     );
   }

@@ -22,6 +22,35 @@ final dShort = DateFormat('d MMM');
 final dLong = DateFormat('EEE, d MMM y');
 final dTime = DateFormat('d MMM, h:mm a');
 
+/// A deadline: "18 Oct", "18 Oct, 5:00 PM", or with the year when it isn't this year.
+String fmtDue(DateTime d, {bool long = false}) {
+  final hasTime = d.hour != 0 || d.minute != 0;
+  final otherYear = d.year != DateTime.now().year;
+  final date = DateFormat(long ? (otherYear ? 'EEE, d MMM y' : 'EEE, d MMM') : (otherYear ? 'd MMM y' : 'd MMM')).format(d);
+  return hasTime ? '$date, ${DateFormat('h:mm a').format(d)}' : date;
+}
+
+/// Pick a deadline date, then an optional time. Returns null if cancelled.
+Future<DateTime?> pickDeadline(BuildContext context, DateTime? current) async {
+  final now = DateTime.now();
+  final d = await showDatePicker(context: context, initialDate: current ?? now, firstDate: DateTime(now.year - 5), lastDate: DateTime(now.year + 10), helpText: 'Deadline');
+  if (d == null || !context.mounted) return null;
+  final had = current != null && (current.hour != 0 || current.minute != 0);
+  final t = await showTimePicker(context: context, helpText: 'Add a time (optional)', cancelText: 'No time', initialTime: had ? TimeOfDay.fromDateTime(current) : const TimeOfDay(hour: 17, minute: 0));
+  return t == null ? d : DateTime(d.year, d.month, d.day, t.hour, t.minute);
+}
+
+/// Date and time an item was made or changed: "Today, 9:41 AM", "Yesterday, …", "12 Oct 2026, …"
+String fmtStamp(DateTime d) {
+  final now = DateTime.now();
+  final day = DateTime(d.year, d.month, d.day);
+  final today = DateTime(now.year, now.month, now.day);
+  final t = DateFormat('h:mm a').format(d);
+  if (day == today) return 'Today, $t';
+  if (day == today.subtract(const Duration(days: 1))) return 'Yesterday, $t';
+  return '${DateFormat(d.year == now.year ? 'd MMM' : 'd MMM y').format(d)}, $t';
+}
+
 String fmtMoney(double v, String cur) {
   final f = NumberFormat.currency(name: cur, symbol: currencySymbols[cur] ?? '$cur ', decimalDigits: v == v.roundToDouble() ? 0 : 2);
   return f.format(v);
@@ -363,14 +392,16 @@ class DateRow extends StatelessWidget {
   final IconData icon;
   final DateTime? value;
   final bool withTime;
+  /// Date first, then an optional time (cancel the clock to keep just the date).
+  final bool optionalTime;
   final ValueChanged<DateTime?> onChanged;
-  const DateRow({super.key, required this.label, required this.icon, required this.value, required this.onChanged, this.withTime = false});
+  const DateRow({super.key, required this.label, required this.icon, required this.value, required this.onChanged, this.withTime = false, this.optionalTime = false});
   @override
   Widget build(BuildContext context) => RowTile(
         icon: icon,
         color: 12,
         title: label,
-        value: value == null ? 'Not set' : (withTime ? dTime : dLong).format(value!),
+        value: value == null ? 'Not set' : (optionalTime ? fmtDue(value!, long: true) : (withTime ? dTime : dLong).format(value!)),
         trailing: value == null
             ? null
             : IconButton(tooltip: 'Clear', icon: Icon(Icons.close_rounded, size: 18, color: context.mutedText), onPressed: () => onChanged(null)),
@@ -378,6 +409,12 @@ class DateRow extends StatelessWidget {
           final now = DateTime.now();
           final d = await showDatePicker(context: context, initialDate: value ?? now, firstDate: DateTime(now.year - 5), lastDate: DateTime(now.year + 10));
           if (d == null) return;
+          if (optionalTime && context.mounted) {
+            final had = value != null && (value!.hour != 0 || value!.minute != 0);
+            final t = await showTimePicker(context: context, helpText: 'Add a time (optional)', cancelText: 'No time', initialTime: had ? TimeOfDay.fromDateTime(value!) : const TimeOfDay(hour: 17, minute: 0));
+            onChanged(t == null ? d : DateTime(d.year, d.month, d.day, t.hour, t.minute));
+            return;
+          }
           if (!withTime || !context.mounted) {
             onChanged(d);
             return;
@@ -884,13 +921,13 @@ class DropdownTile<V> extends StatelessWidget {
 }
 
 /// Ask for a line of text.
-Future<String?> askText(BuildContext context, {required String title, String initial = '', String hint = ''}) {
+Future<String?> askText(BuildContext context, {required String title, String initial = '', String hint = '', bool number = false}) {
   final c = TextEditingController(text: initial);
   return showDialog<String>(
     context: context,
     builder: (d) => AlertDialog(
       title: Text(title, style: const TextStyle(fontSize: T.heading, fontWeight: FontWeight.w700)),
-      content: TextField(controller: c, autofocus: true, textCapitalization: TextCapitalization.sentences, decoration: InputDecoration(hintText: hint), onSubmitted: (v) => Navigator.pop(d, v.trim())),
+      content: TextField(controller: c, autofocus: true, keyboardType: number ? TextInputType.number : null, textCapitalization: TextCapitalization.sentences, decoration: InputDecoration(hintText: hint), onSubmitted: (v) => Navigator.pop(d, v.trim())),
       actions: [TextButton(onPressed: () => Navigator.pop(d), child: const Text('Cancel')), TextButton(onPressed: () => Navigator.pop(d, c.text.trim()), child: const Text('Save'))],
     ),
   );

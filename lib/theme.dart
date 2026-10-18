@@ -101,7 +101,38 @@ const appThemes = <AppThemeOption>[
   AppThemeOption('Mocha', Color(0xFF8D5B3D)),
   AppThemeOption('Slate', Color(0xFF475569)),
   AppThemeOption('Midnight', Color(0xFF1E3A8A)),
+  // Bright & light
+  AppThemeOption('Bubblegum', Color(0xFFFF6FB5)),
+  AppThemeOption('Flamingo', Color(0xFFF472B6)),
+  AppThemeOption('Coral Pop', Color(0xFFFF6B6B)),
+  AppThemeOption('Tangerine', Color(0xFFFF8A3D)),
+  AppThemeOption('Sunshine', Color(0xFFF5B400)),
+  AppThemeOption('Electric Lime', Color(0xFF7CC40F)),
+  AppThemeOption('Peppermint', Color(0xFF2DD4A0)),
+  AppThemeOption('Turquoise', Color(0xFF14C8C8)),
+  AppThemeOption('Bright Sky', Color(0xFF38B6FF)),
+  AppThemeOption('Azure', Color(0xFF3D8BFF)),
+  AppThemeOption('Lilac Pop', Color(0xFFA78BFA)),
+  AppThemeOption('Electric Violet', Color(0xFF8B5CF6)),
+  AppThemeOption('Fuchsia', Color(0xFFE040FB)),
+  AppThemeOption('Watermelon', Color(0xFFFF4D6D)),
 ];
+
+/// Soft colours that match the current theme: the accent first, then
+/// gentle neighbours around the colour wheel (for charts and stats).
+List<Color> softPalette(Color accent, int n, {bool dark = false}) {
+  final h = HSLColor.fromColor(accent);
+  const steps = [0.0, 42.0, -38.0, 90.0, -80.0, 140.0, 190.0, -130.0];
+  return [
+    for (var i = 0; i < n; i++)
+      HSLColor.fromAHSL(
+        1,
+        (h.hue + steps[i % steps.length] + 360) % 360,
+        (h.saturation * 0.78).clamp(0.38, 0.72),
+        dark ? 0.68 : (i == 0 ? h.lightness.clamp(0.48, 0.6) : 0.64),
+      ).toColor(),
+  ];
+}
 
 /// Background styles drawn behind every page.
 const bgStyles = <(String, String)>[

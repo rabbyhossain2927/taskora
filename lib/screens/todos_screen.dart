@@ -15,7 +15,13 @@ Future<void> deleteTodos(BuildContext context, List<String> ids) async {
   final m = ScaffoldMessenger.of(context);
   final undo = await s.deleteDocs('todos', ids);
   m.hideCurrentSnackBar();
-  m.showSnackBar(SnackBar(content: Text(ids.length == 1 ? 'To-do deleted' : '${ids.length} to-dos deleted'), duration: const Duration(seconds: 5), action: SnackBarAction(label: 'Undo', onPressed: () => undo())));
+  m.showSnackBar(SnackBar(content: Text(ids.length == 1 ? 'To-do moved to Trash' : '${ids.length} to-dos moved to Trash'), duration: const Duration(seconds: 5), action: SnackBarAction(label: 'Undo', onPressed: () => undo())));
+}
+
+Future<void> archiveTodos(BuildContext context, List<String> ids) async {
+  final s = context.read<Store>();
+  await s.archive('todos', ids);
+  if (context.mounted) showUndo(context, ids.length == 1 ? 'To-do archived' : '${ids.length} to-dos archived', () => s.archive('todos', ids, false));
 }
 
 Future<int?> askPriority(BuildContext context, [int? current]) =>
@@ -52,15 +58,15 @@ void showTodoActions(BuildContext context, Todo t, {VoidCallback? onSelect}) {
       }
     }),
     ActionItem(Icons.event_outlined, 'Change deadline', () async {
-      final now = DateTime.now();
-      final d = await showDatePicker(context: context, initialDate: t.deadline ?? now, firstDate: DateTime(now.year - 2), lastDate: DateTime(now.year + 5));
+      final d = await pickDeadline(context, t.deadline);
       if (d != null) {
         t.deadline = d;
         s.saveTodo(t);
       }
     }),
     if (onSelect != null) ActionItem(Icons.checklist_rounded, 'Select several', onSelect),
-    ActionItem(Icons.delete_outline_rounded, 'Delete', () => deleteTodos(context, [t.id]), danger: true),
+    ActionItem(Icons.archive_outlined, 'Archive', () => archiveTodos(context, [t.id])),
+    ActionItem(Icons.delete_outline_rounded, 'Move to Trash', () => deleteTodos(context, [t.id]), danger: true),
   ]);
 }
 
@@ -117,7 +123,7 @@ class _TodoRowState extends State<TodoRow> {
                       Row(mainAxisSize: MainAxisSize.min, children: [
                         Icon(Icons.event_outlined, size: 13, color: overdue ? C.red : context.mutedText),
                         const SizedBox(width: 3),
-                        Text(dShort.format(t.deadline!), style: TextStyle(fontSize: 12, color: overdue ? C.red : context.mutedText, fontWeight: FontWeight.w500)),
+                        Text(fmtDue(t.deadline!), style: TextStyle(fontSize: 12, color: overdue ? C.red : context.mutedText, fontWeight: FontWeight.w500)),
                       ]),
                     PriorityBadge(t.priority),
                     Row(mainAxisSize: MainAxisSize.min, children: [
@@ -190,7 +196,7 @@ class _TodoRowState extends State<TodoRow> {
           backgroundColor: C.red,
           foregroundColor: Colors.white,
           icon: Icons.delete_outline_rounded,
-          label: 'Delete',
+          label: 'Trash',
           borderRadius: BorderRadius.circular(16),
         ),
       ]),
@@ -383,7 +389,17 @@ class _TodosScreenState extends State<TodosScreen> {
                           },
                   ),
                   IconButton(
-                    tooltip: 'Delete',
+                    tooltip: 'Archive',
+                    icon: const Icon(Icons.archive_outlined),
+                    onPressed: picked.isEmpty
+                        ? null
+                        : () {
+                            archiveTodos(context, picked.toList());
+                            _stopSelect();
+                          },
+                  ),
+                  IconButton(
+                    tooltip: 'Move to Trash',
                     icon: const Icon(Icons.delete_outline_rounded, color: C.red),
                     onPressed: picked.isEmpty
                         ? null

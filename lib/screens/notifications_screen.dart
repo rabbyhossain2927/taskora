@@ -5,6 +5,7 @@ import '../models.dart';
 import '../services/store.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'notification_settings.dart';
 import 'update_screen.dart';
 
 /// Swipe a notification right-to-left for Read / Delete.
@@ -46,6 +47,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       body: SafeArea(
         child: Column(children: [
           Header('Notifications', actions: [
+            if (!selecting) RoundButton(icon: Icons.settings_outlined, tooltip: 'Notification settings', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationSettingsScreen()))),
             if (list.isNotEmpty)
               TextButton(
                 onPressed: () => setState(() {

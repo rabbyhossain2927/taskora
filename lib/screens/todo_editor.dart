@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../icons.dart';
@@ -23,11 +24,15 @@ class _TodoEditorState extends State<TodoEditor> {
   late bool isNew;
   final title = TextEditingController(), notes = TextEditingController(), sub = TextEditingController();
   String reminderMode = 'none'; // none | 1h | 1d | custom
+  late final Store store;
+  late String original;
+  bool closed = false; // saved or deleted with a button
 
   @override
   void initState() {
     super.initState();
     final s = context.read<Store>();
+    store = s;
     final existing = widget.id == null ? null : s.todos.where((x) => x.id == widget.id).firstOrNull;
     isNew = existing == null;
     t = existing != null
@@ -37,13 +42,27 @@ class _TodoEditorState extends State<TodoEditor> {
     if (!isNew && t.reminder != null) reminderMode = 'custom';
     title.text = t.title;
     notes.text = t.notes;
+    original = jsonEncode(t.toMap());
+  }
+
+  /// Going back saves your changes too (the button still works).
+  void _autoSave() {
+    if (closed) return;
+    t.title = title.text.trim();
+    t.notes = notes.text.trim();
+    if (t.title.isEmpty) return;
+    _applyReminder();
+    if (jsonEncode(t.toMap()) == original) return;
+    store.saveTodo(t);
   }
 
   void _applyReminder() {
     final d = t.deadline;
+    // A deadline with a time reminds you before that time; date-only uses 9 AM.
+    final at = d == null ? null : ((d.hour != 0 || d.minute != 0) ? d : DateTime(d.year, d.month, d.day, 9));
     if (reminderMode == 'none') t.reminder = null;
-    if (reminderMode == '1h' && d != null) t.reminder = DateTime(d.year, d.month, d.day, 9).subtract(const Duration(hours: 1));
-    if (reminderMode == '1d' && d != null) t.reminder = DateTime(d.year, d.month, d.day, 9).subtract(const Duration(days: 1));
+    if (reminderMode == '1h' && at != null) t.reminder = at.subtract(const Duration(hours: 1));
+    if (reminderMode == '1d' && at != null) t.reminder = at.subtract(const Duration(days: 1));
   }
 
   Future<void> _save() async {
@@ -55,6 +74,7 @@ class _TodoEditorState extends State<TodoEditor> {
     }
     _applyReminder();
     final s = context.read<Store>();
+    closed = true;
     Navigator.pop(context);
     await s.saveTodo(t);
   }
@@ -70,7 +90,11 @@ class _TodoEditorState extends State<TodoEditor> {
   Widget build(BuildContext context) {
     final s = context.watch<Store>();
     final subDone = t.subtasks.where((x) => x.done).length;
-    return Scaffold(
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _autoSave();
+      },
+      child: Scaffold(
       body: SafeArea(
         child: Column(children: [
           Header(isNew ? 'New to-do' : 'To-do', actions: [
@@ -80,9 +104,10 @@ class _TodoEditorState extends State<TodoEditor> {
                 tooltip: 'Delete',
                 onTap: () async {
                   final m = ScaffoldMessenger.of(context);
+                  closed = true;
                   Navigator.pop(context);
                   final undo = await s.deleteDocs('todos', [t.id]);
-                  m.showSnackBar(SnackBar(content: const Text('To-do deleted'), duration: const Duration(seconds: 5), action: SnackBarAction(label: 'Undo', onPressed: () => undo())));
+                  m.showSnackBar(SnackBar(content: const Text('To-do moved to Trash'), duration: const Duration(seconds: 5), action: SnackBarAction(label: 'Undo', onPressed: () => undo())));
                 },
               ),
           ]),
@@ -126,7 +151,7 @@ class _TodoEditorState extends State<TodoEditor> {
                 child: Column(children: [
                   DateRow(label: 'Start', icon: Icons.play_circle_outline, value: t.start, onChanged: (d) => setState(() => t.start = d)),
                   const Divider(),
-                  DateRow(label: 'Deadline', icon: Icons.flag_outlined, value: t.deadline, onChanged: (d) => setState(() => t.deadline = d)),
+                  DateRow(label: 'Deadline', icon: Icons.flag_outlined, optionalTime: true, value: t.deadline, onChanged: (d) => setState(() => t.deadline = d)),
                   const Divider(),
                   RowTile(icon: Icons.person_add_alt_1_outlined, color: 6, title: 'Assigned', subtitle: 'Share to-dos with teammates', trailing: const SoonPill()),
                 ]),
@@ -223,6 +248,7 @@ class _TodoEditorState extends State<TodoEditor> {
             child: FilledButton(onPressed: _save, child: Text(isNew ? 'Add to-do' : 'Save changes')),
           ),
         ]),
+      ),
       ),
     );
   }

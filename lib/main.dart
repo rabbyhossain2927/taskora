@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'screens/auth_screens.dart';
+import 'screens/focus_screen.dart';
 import 'screens/shell.dart';
 import 'screens/splash_screen.dart';
 import 'screens/update_screen.dart';
+import 'services/focus_service.dart';
 import 'services/notify_service.dart';
 import 'services/prefs.dart';
 import 'services/store.dart';
@@ -20,10 +22,15 @@ Future<void> main() async {
   try {
     await NotifyService.init();
   } catch (_) {}
+  try {
+    await FocusService.instance.init();
+  } catch (_) {}
   NotifyService.onOpenUpdate = () => NotifyService.navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const UpdateScreen()));
+  NotifyService.onOpenFocus = () => NotifyService.navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const FocusScreen()));
   runApp(MultiProvider(
     providers: [
       ChangeNotifierProvider.value(value: Prefs.instance),
+      ChangeNotifierProvider.value(value: FocusService.instance),
       ChangeNotifierProvider(create: (_) => AuthState(), lazy: false),
     ],
     child: const TaskOraApp(),

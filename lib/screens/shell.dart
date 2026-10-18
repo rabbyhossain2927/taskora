@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../services/backup_service.dart';
+import '../services/focus_service.dart';
+import '../services/notify_service.dart';
 import '../services/prefs.dart';
 import '../services/store.dart';
 import '../theme.dart';
@@ -45,6 +47,11 @@ class ShellState extends State<Shell> with WidgetsBindingObserver, SingleTickerP
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+      // Android 13+ only shows notifications after you allow them.
+      try {
+        await NotifyService.requestPermission();
+      } catch (_) {}
+      if (!mounted) return;
       UpdatePrompt.checkInBackground(context);
       await Future.delayed(const Duration(seconds: 4));
       if (mounted) BackupService.runAutoBackups(context.read<Store>());
@@ -60,9 +67,15 @@ class ShellState extends State<Shell> with WidgetsBindingObserver, SingleTickerP
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && mounted) {
+    if (!mounted) return;
+    if (state == AppLifecycleState.resumed) {
       context.read<Store>().syncQuietly();
+      context.read<Store>().checkReminders();
+      FocusService.instance.refresh();
       UpdatePrompt.checkInBackground(context);
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      // Save to the phone right away in case the app is closed.
+      context.read<Store>().flush();
     }
   }
 
@@ -221,8 +234,8 @@ class _AddItem extends StatelessWidget {
   }
 }
 
-/// Dark pill bar; the selected tab is a light pill with its icon and name
-/// that slides between tabs. Colours follow the theme.
+/// White pill bar; the selected tab is a pill in the theme colour with its
+/// icon and name, and it slides between tabs.
 class _NavPill extends StatelessWidget {
   final int tab;
   final ValueChanged<int> onTap;
@@ -237,8 +250,8 @@ class _NavPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = context.isDark;
     final a = context.accent;
-    // Deep shade of the theme colour (near-black, like the reference)
-    final bar = dark ? Color.lerp(a, const Color(0xFF0E0E13), 0.80)! : Color.lerp(a, const Color(0xFF14141B), 0.84)!;
+    final bar = dark ? const Color(0xFF1E1E27) : Colors.white;
+    final idle = dark ? const Color(0xFFA0A0B0) : const Color(0xFF8A8A99);
     const pad = 6.0;
     const curve = Curves.easeOutCubic;
     const dur = Duration(milliseconds: 320);
@@ -248,7 +261,11 @@ class _NavPill extends StatelessWidget {
       decoration: BoxDecoration(
         color: bar,
         borderRadius: BorderRadius.circular(33),
-        boxShadow: [BoxShadow(color: bar.withOpacity(0.35), blurRadius: 22, offset: const Offset(0, 10))],
+        border: Border.all(color: dark ? Colors.white10 : const Color(0xFFEDEDF3)),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(dark ? 0.35 : 0.07), blurRadius: 24, offset: const Offset(0, 10)),
+          BoxShadow(color: a.withOpacity(dark ? 0.10 : 0.08), blurRadius: 30, offset: const Offset(0, 6)),
+        ],
       ),
       child: LayoutBuilder(builder: (context, c) {
         final w = c.maxWidth;
@@ -266,9 +283,9 @@ class _NavPill extends StatelessWidget {
             width: selW,
             child: Container(
               decoration: BoxDecoration(
-                color: dark ? const Color(0xFFF3F3F7) : Colors.white,
+                gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color.lerp(a, Colors.white, 0.14)!, a]),
                 borderRadius: BorderRadius.circular(27),
-                boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 8, offset: Offset(0, 2))],
+                boxShadow: [BoxShadow(color: a.withOpacity(0.32), blurRadius: 12, offset: const Offset(0, 4))],
               ),
             ),
           ),
@@ -295,7 +312,7 @@ class _NavPill extends StatelessWidget {
                             i == tab ? items[i].$2 : items[i].$1,
                             key: ValueKey('$i-${i == tab}'),
                             size: 23,
-                            color: i == tab ? a : Colors.white.withOpacity(0.62),
+                            color: i == tab ? Colors.white : idle,
                           ),
                         ),
                         AnimatedSize(
@@ -308,7 +325,7 @@ class _NavPill extends StatelessWidget {
                                       maxLines: 1,
                                       softWrap: false,
                                       overflow: TextOverflow.fade,
-                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF16161D))),
+                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
                                 )
                               : const SizedBox.shrink(),
                         ),

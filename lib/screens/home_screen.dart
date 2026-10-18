@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../icons.dart';
 import '../models.dart';
+import '../services/focus_service.dart';
 import '../services/prefs.dart';
 import '../services/store.dart';
 import '../theme.dart';
@@ -11,6 +12,7 @@ import '../widgets/common.dart';
 import 'calendar_screen.dart';
 import 'focus_screen.dart';
 import 'note_editor.dart';
+import 'notes_screen.dart';
 import 'notifications_screen.dart';
 import 'project_detail.dart';
 import 'project_editor.dart';
@@ -330,6 +332,7 @@ class _FocusTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final a = context.accent;
+    final f = context.watch<FocusService>();
     return Material(
       borderRadius: BorderRadius.circular(22),
       clipBehavior: Clip.antiAlias,
@@ -346,17 +349,17 @@ class _FocusTile extends StatelessWidget {
                 Expanded(child: Text('Focus', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: context.onTint))),
               ]),
               const SizedBox(height: 4),
-              Text('$minutes min · no distractions', style: TextStyle(fontSize: 11.5, color: context.onTint.withOpacity(0.75))),
+              Text(f.active ? '${FocusEngine.fmt(f.leftMs)} left${f.paused ? ' · paused' : ''}' : '$minutes min · no distractions', style: TextStyle(fontSize: 11.5, color: context.onTint.withOpacity(0.75), fontWeight: f.active ? FontWeight.w700 : FontWeight.w400)),
               const Spacer(),
               const SizedBox(height: 8),
               Row(children: [
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                   decoration: BoxDecoration(color: a, borderRadius: BorderRadius.circular(12)),
-                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.play_arrow_rounded, color: Colors.white, size: 16),
-                    SizedBox(width: 4),
-                    Text('Start', style: TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(f.active ? Icons.timer_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 16),
+                    const SizedBox(width: 4),
+                    Text(f.active ? 'Open' : 'Start', style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)),
                   ]),
                 ),
               ]),
@@ -410,32 +413,87 @@ class _HomeSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<Store>();
-    final notes = s.notes.where((n) => n.sectionId == sec.id).take(4).toList();
+    final all = s.notes.where((n) => n.sectionId == sec.id).toList();
+    final notes = all.take(4).toList();
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Box(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Icon(Icons.folder_rounded, size: 18, color: context.accent),
-            const SizedBox(width: 6),
-            Text(sec.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
-          ]),
-          const SizedBox(height: 6),
-          if (notes.isEmpty) Text('No notes in this folder yet.', style: TextStyle(color: context.mutedText, fontSize: 13)),
-          for (final n in notes)
-            InkWell(
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditor(id: n.id))),
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FolderScreen(id: sec.id))),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(children: [
+              Icon(Icons.folder_rounded, size: 18, color: context.accent),
+              const SizedBox(width: 6),
+              Expanded(child: Text(sec.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5))),
+              Text(all.length > 4 ? 'All ${all.length}' : '${all.length} notes', style: TextStyle(color: context.accent, fontWeight: FontWeight.w600, fontSize: 12.5)),
+              Icon(Icons.chevron_right_rounded, size: 18, color: context.accent),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 4),
+        if (notes.isEmpty)
+          Box(padding: const EdgeInsets.all(14), child: Text('No notes in this folder yet.', style: TextStyle(color: context.mutedText, fontSize: 13)))
+        else
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            padding: EdgeInsets.zero,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            childAspectRatio: 1.05,
+            children: [for (final n in notes) _HomeNote(n: n)],
+          ),
+      ]),
+    );
+  }
+}
+
+class _HomeNote extends StatelessWidget {
+  final Note n;
+  const _HomeNote({required this.n});
+  @override
+  Widget build(BuildContext context) {
+    final plain = n.color == 0;
+    final bg = context.isDark && plain ? context.surface : noteColor(n.color);
+    final ink = context.isDark && plain ? null : C.ink;
+    final img = n.firstImage;
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditor(id: n.id))),
+        child: Container(
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(20), border: Border.all(color: context.isDark ? Colors.white10 : C.line)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (img != null) SizedBox(height: 54, width: double.infinity, child: Image.network(img.url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox())),
+            Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 7),
-                child: Row(children: [
-                  Icon(iconOf(n.icon), size: 16, color: context.mutedText),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text(n.title.isEmpty ? 'Untitled' : n.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500))),
-                  Text(dShort.format(n.updatedAt), style: TextStyle(color: context.mutedText, fontSize: 12)),
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Icon(iconOf(n.icon), size: 15, color: ink ?? context.accent),
+                    const SizedBox(width: 6),
+                    Expanded(child: Text(n.title.isEmpty ? 'Untitled' : n.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: ink))),
+                    if (n.pinned) Icon(Icons.push_pin, size: 12, color: ink ?? context.mutedText),
+                  ]),
+                  const SizedBox(height: 5),
+                  Expanded(
+                    child: Text(n.preview.isEmpty ? n.allText.trim() : n.preview, maxLines: img != null ? 1 : 3, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, height: 1.4, color: ink?.withOpacity(0.7) ?? context.mutedText)),
+                  ),
+                  Row(children: [
+                    Icon(Icons.edit_outlined, size: 11, color: ink?.withOpacity(0.5) ?? context.mutedText),
+                    const SizedBox(width: 3),
+                    Expanded(child: Text(fmtStamp(n.updatedAt), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, color: ink?.withOpacity(0.55) ?? context.mutedText, fontWeight: FontWeight.w500))),
+                  ]),
                 ]),
               ),
             ),
-        ]),
+          ]),
+        ),
       ),
     );
   }

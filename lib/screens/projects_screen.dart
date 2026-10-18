@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:provider/provider.dart';
+import '../icons.dart';
 import '../models.dart';
 import '../services/prefs.dart';
 import '../services/store.dart';
@@ -31,7 +32,13 @@ Future<void> deleteProject(BuildContext context, Project p) async {
   final m = ScaffoldMessenger.of(context);
   final undo = await s.deleteDocs('projects', [p.id]);
   m.hideCurrentSnackBar();
-  m.showSnackBar(SnackBar(content: Text('“${p.title}” deleted'), duration: const Duration(seconds: 5), action: SnackBarAction(label: 'Undo', onPressed: () => undo())));
+  m.showSnackBar(SnackBar(content: Text('“${p.title}” moved to Trash'), duration: const Duration(seconds: 5), action: SnackBarAction(label: 'Undo', onPressed: () => undo())));
+}
+
+Future<void> archiveProject(BuildContext context, Project p) async {
+  final s = context.read<Store>();
+  await s.archive('projects', [p.id]);
+  if (context.mounted) showUndo(context, '“${p.title}” archived', () => s.archive('projects', [p.id], false));
 }
 
 Future<void> pickProjectStatus(BuildContext context, Project p) async {
@@ -69,7 +76,11 @@ void showProjectActions(BuildContext context, Project p, {bool fromDetail = fals
     ActionItem(Icons.low_priority_rounded, 'Change priority', () => pickProjectPriority(context, p)),
     ActionItem(Icons.category_outlined, 'Change category', () => pickProjectCategory(context, p)),
     if (!fromDetail) ActionItem(Icons.open_in_new_rounded, 'Open', () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProjectDetail(id: p.id)))),
-    ActionItem(Icons.delete_outline_rounded, 'Delete', () {
+    ActionItem(Icons.archive_outlined, 'Archive', () {
+      if (fromDetail) Navigator.maybePop(context);
+      archiveProject(context, p);
+    }),
+    ActionItem(Icons.delete_outline_rounded, 'Move to Trash', () {
       if (fromDetail) Navigator.maybePop(context);
       deleteProject(context, p);
     }, danger: true),
@@ -83,19 +94,40 @@ class ProjectsScreen extends StatefulWidget {
 }
 
 class _ProjectsScreenState extends State<ProjectsScreen> {
-  bool board = false;
   bool showDone = false;
 
   @override
   Widget build(BuildContext context) {
     final s = context.watch<Store>();
+    final prefs = context.watch<Prefs>();
+    final view = prefs.projectView;
+    final board = view == 'board';
+    final grid = view == 'grid';
+    Widget cards(List<Project> list, {bool faded = false}) => grid
+        ? GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            padding: EdgeInsets.zero,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 1,
+            children: [for (var i = 0; i < list.length; i++) FadeIn(index: i, child: Opacity(opacity: faded ? 0.72 : 1, child: ProjectTile(p: list[i])))],
+          )
+        : Column(children: [
+            for (var i = 0; i < list.length; i++) FadeIn(index: i, child: Padding(padding: const EdgeInsets.only(bottom: 10), child: Opacity(opacity: faded ? 0.72 : 1, child: _SwipeProject(p: list[i])))),
+          ]);
     final active = s.projects.where((p) => !p.done).toList();
     final done = s.projects.where((p) => p.done).toList();
     return SafeArea(
       bottom: false,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         MainHeader('Projects', subtitle: '${active.length} active · ${done.length} completed', actions: [
-          RoundButton(icon: board ? Icons.view_agenda_outlined : Icons.view_kanban_outlined, tooltip: board ? 'List view' : 'Board view', onTap: () => setState(() => board = !board)),
+          RoundButton(
+            icon: switch (view) { 'grid' => Icons.view_agenda_outlined, 'list' => Icons.view_kanban_outlined, _ => Icons.grid_view_rounded },
+            tooltip: switch (view) { 'grid' => 'List view', 'list' => 'Board view', _ => 'Grid view' },
+            onTap: () => prefs.projectView = switch (view) { 'grid' => 'list', 'list' => 'board', _ => 'grid' },
+          ),
         ]),
         Expanded(
           child: SyncRefresh(
@@ -108,10 +140,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                           if (active.isNotEmpty)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 8, left: 4),
-                              child: Text('Swipe right to complete · hold for options', style: TextStyle(fontSize: 11.5, color: context.mutedText)),
+                              child: Text(grid ? 'Tap to open · hold for options' : 'Swipe right to complete · hold for options', style: TextStyle(fontSize: 11.5, color: context.mutedText)),
                             ),
-                          for (var i = 0; i < active.length; i++)
-                            FadeIn(index: i, child: Padding(padding: const EdgeInsets.only(bottom: 10), child: _SwipeProject(p: active[i]))),
+                          cards(active),
                           if (done.isNotEmpty) ...[
                             const SizedBox(height: 6),
                             InkWell(
@@ -132,11 +163,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                               duration: const Duration(milliseconds: 250),
                               curve: Curves.easeOutCubic,
                               alignment: Alignment.topCenter,
-                              child: showDone
-                                  ? Column(children: [
-                                      for (final p in done) Padding(padding: const EdgeInsets.only(bottom: 10), child: Opacity(opacity: 0.72, child: _SwipeProject(p: p))),
-                                    ])
-                                  : const SizedBox(width: double.infinity),
+                              child: showDone ? cards(done, faded: true) : const SizedBox(width: double.infinity),
                             ),
                           ],
                         ]),
@@ -184,7 +211,7 @@ class _SwipeProject extends StatelessWidget {
             backgroundColor: C.red,
             foregroundColor: Colors.white,
             icon: Icons.delete_outline_rounded,
-            label: 'Delete',
+            label: 'Trash',
             borderRadius: BorderRadius.circular(22),
           ),
         ]),
@@ -312,7 +339,90 @@ class ProjectCard extends StatelessWidget {
                 if (p.deadline != null) ...[
                   Icon(Icons.event_outlined, size: 13, color: context.mutedText),
                   const SizedBox(width: 3),
-                  Text(dShort.format(p.deadline!), style: TextStyle(fontSize: 12, color: context.mutedText, fontWeight: FontWeight.w500)),
+                  Text(fmtDue(p.deadline!), style: TextStyle(fontSize: 12, color: context.mutedText, fontWeight: FontWeight.w500)),
+                ],
+              ]),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Square card for the grid: the cover photo fills it.
+class ProjectTile extends StatelessWidget {
+  final Project p;
+  const ProjectTile({super.key, required this.p});
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<Store>();
+    final c = pastel(p.color);
+    final pr = s.progressOf(p.id);
+    final tasks = s.todosOf(p.id);
+    final st = s.status(p.status);
+    final cover = p.cover;
+    final onPhoto = cover != null;
+    final fg = onPhoto ? Colors.white : (context.isDark ? Colors.white : C.ink);
+    final sub = onPhoto ? Colors.white.withOpacity(0.85) : (context.isDark ? Colors.white70 : c.fg);
+    return Material(
+      color: context.isDark ? c.fg.withOpacity(0.22) : c.bg,
+      borderRadius: BorderRadius.circular(24),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProjectDetail(id: p.id))),
+        onLongPress: () => showProjectActions(context, p),
+        child: Stack(fit: StackFit.expand, children: [
+          if (onPhoto) ...[
+            Image.network(cover!.url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: c.bg)),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, stops: [0, 0.35, 1], colors: [Color(0x55000000), Color(0x00000000), Color(0xCC000000)]),
+              ),
+            ),
+          ] else
+            Positioned(right: -18, bottom: -18, child: Icon(iconOf(p.icon), size: 110, color: c.fg.withOpacity(context.isDark ? 0.18 : 0.10))),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(onPhoto ? 0.92 : 0.8), borderRadius: BorderRadius.circular(10)),
+                  child: Icon(iconOf(p.icon), size: 17, color: c.fg),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(onPhoto ? 0.92 : 0.8), borderRadius: BorderRadius.circular(10)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Container(width: 6, height: 6, decoration: BoxDecoration(color: priorityColor(p.priority), shape: BoxShape.circle)),
+                    const SizedBox(width: 4),
+                    Text(st.label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: pastel(st.color).fg)),
+                  ]),
+                ),
+              ]),
+              const Spacer(),
+              Text(p.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5, height: 1.2, color: fg, decoration: p.done ? TextDecoration.lineThrough : null, decorationColor: fg)),
+              const SizedBox(height: 8),
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: pr),
+                duration: const Duration(milliseconds: 700),
+                curve: Curves.easeOutCubic,
+                builder: (_, v, __) => ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(value: v, minHeight: 5, color: onPhoto ? Colors.white : c.fg, backgroundColor: onPhoto ? Colors.white30 : Colors.white70),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(children: [
+                Text('${tasks.where((t) => t.done).length}/${tasks.length}', style: TextStyle(fontSize: 11, color: sub, fontWeight: FontWeight.w600)),
+                const Spacer(),
+                if (p.deadline != null) ...[
+                  Icon(Icons.event_outlined, size: 11, color: sub),
+                  const SizedBox(width: 2),
+                  Flexible(child: Text(fmtDue(p.deadline!), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: sub, fontWeight: FontWeight.w600))),
                 ],
               ]),
             ]),
