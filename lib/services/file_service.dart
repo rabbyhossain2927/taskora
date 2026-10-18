@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
@@ -14,21 +15,28 @@ class FileService {
 
   /// Lets the user pick a file and uploads it. Returns null if they cancel.
   static Future<Attachment?> pickAndUpload({bool imagesOnly = false}) async {
-    final r = await FilePicker.platform.pickFiles(type: imagesOnly ? FileType.image : FileType.any);
-    if (r == null || r.files.isEmpty || r.files.single.path == null) return null;
+    final r = await FilePicker.platform.pickFiles(type: imagesOnly ? FileType.image : FileType.any, withData: kIsWeb);
+    if (r == null || r.files.isEmpty) return null;
     final f = r.files.single;
     if (f.size > maxBytes) throw 'Files can be up to 30 MB. This one is ${(f.size / 1048576).toStringAsFixed(1)} MB.';
+    if (kIsWeb) {
+      if (f.bytes == null) return null;
+      return _send(http.MultipartFile.fromBytes('file', f.bytes!, filename: f.name), f.name);
+    }
+    if (f.path == null) return null;
     return upload(File(f.path!), f.name);
   }
 
-  static Future<Attachment> upload(File file, String name) async {
+  static Future<Attachment> upload(File file, String name) async => _send(await http.MultipartFile.fromPath('file', file.path, filename: name), name);
+
+  static Future<Attachment> _send(http.MultipartFile part, String name) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) throw 'Not signed in';
     final token = await user.getIdToken() ?? '';
     final req = http.MultipartRequest('POST', Uri.parse('${Config.apiBase}/files.php'))
       ..headers['X-Auth-Token'] = token
       ..headers['Authorization'] = 'Bearer $token'
-      ..files.add(await http.MultipartFile.fromPath('file', file.path, filename: name));
+      ..files.add(part);
     final res = await http.Response.fromStream(await req.send().timeout(const Duration(minutes: 5)));
     Map<String, dynamic> j;
     try {

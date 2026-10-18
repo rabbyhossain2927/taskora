@@ -1,6 +1,9 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:convert';
+import '../platform/web_tools.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -51,7 +54,16 @@ class _BackupScreenState extends State<BackupScreen> {
     return sameDay ? 'Today at ${DateFormat('h:mm a').format(d)}' : DateFormat('d MMM, h:mm a').format(d);
   }
 
+  /// Web: download the whole backup as a .json file.
+  Future<void> _download() async {
+    final data = const JsonEncoder.withIndent(' ').convert(await context.read<Store>().exportAll());
+    downloadBytes(utf8.encode(data), 'taskora-backup-${DateFormat('yyyy-MM-dd-HHmm').format(DateTime.now())}.json', 'application/json');
+    Prefs.instance.lastLocal = DateTime.now().millisecondsSinceEpoch;
+    if (mounted) toast(context, 'Backup downloaded');
+  }
+
   Future<void> _backupLocal() async {
+    if (kIsWeb) return _download();
     setState(() => busyLocal = true);
     try {
       await BackupService.backupLocal(context.read<Store>());
@@ -97,11 +109,13 @@ class _BackupScreenState extends State<BackupScreen> {
   }
 
   Future<void> _restoreFromFile() async {
-    final r = await FilePicker.platform.pickFiles(type: FileType.any);
-    final path = r?.files.single.path;
-    if (path == null || !mounted) return;
+    final r = await FilePicker.platform.pickFiles(type: FileType.any, withData: kIsWeb);
+    if (r == null || r.files.isEmpty || !mounted) return;
+    final f = r.files.single;
+    final String? text = kIsWeb ? (f.bytes == null ? null : utf8.decode(f.bytes!)) : (f.path == null ? null : await File(f.path!).readAsString());
+    if (text == null || !mounted) return;
     try {
-      final n = await BackupService.importFromText(context.read<Store>(), await File(path).readAsString());
+      final n = await BackupService.importFromText(context.read<Store>(), text);
       if (mounted) toast(context, 'Restored $n items');
     } catch (e) {
       if (mounted) toast(context, 'That file is not a TaskOra backup.');
@@ -176,12 +190,13 @@ class _BackupScreenState extends State<BackupScreen> {
                       RowTile(
                         icon: Icons.download_rounded,
                         color: 0,
-                        title: 'Back up now',
-                        subtitle: 'Everything, saved on this phone',
+                        title: kIsWeb ? 'Download a backup' : 'Back up now',
+                        subtitle: kIsWeb ? 'Everything, as a .json file' : 'Everything, saved on this phone',
                         trailing: busyLocal ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
                         onTap: busyLocal ? null : _backupLocal,
                       ),
-                      const Divider(),
+                      if (!kIsWeb) const Divider(),
+                      if (!kIsWeb)
                       DropdownTile<String>(
                         icon: Icons.schedule_rounded,
                         color: 12,
@@ -204,7 +219,8 @@ class _BackupScreenState extends State<BackupScreen> {
                   ),
                 ),
 
-                // ---------- google drive ----------
+                // ---------- google drive (phone only) ----------
+                if (!kIsWeb) ...[
                 const Label('Google Drive'),
                 FadeIn(
                   index: 2,
@@ -242,8 +258,8 @@ class _BackupScreenState extends State<BackupScreen> {
                 ),
 
                 // ---------- lists ----------
-                Label('Backups on this phone · ${local.length} of ${p.keepBackups}'),
-                FadeIn(
+                if (!kIsWeb) Label('Backups on this phone · ${local.length} of ${p.keepBackups}'),
+                if (!kIsWeb) FadeIn(
                   index: 3,
                   child: Box(
                     padding: EdgeInsets.zero,
@@ -257,7 +273,8 @@ class _BackupScreenState extends State<BackupScreen> {
                           ]),
                   ),
                 ),
-                if (drive.isNotEmpty) ...[
+                ],
+                if (drive.isNotEmpty && !kIsWeb) ...[
                   Label('On Google Drive · ${drive.length}'),
                   Box(
                     padding: EdgeInsets.zero,

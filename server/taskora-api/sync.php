@@ -7,6 +7,7 @@ require __DIR__ . '/lib.php';
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') reply(405, ['error' => 'Use POST.']);
 $uid = require_user();
 register_shutdown_function('maybe_self_update');
+register_shutdown_function('maybe_web_update');
 $in = json_input();
 // Position from the last sync: "time|collection|id" (items are sorted by those three).
 $sinceRaw = (string) ($in['since'] ?? '0');

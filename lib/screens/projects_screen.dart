@@ -104,8 +104,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     final board = view == 'board';
     final grid = view == 'grid';
     Widget cards(List<Project> list, {bool faded = false}) => grid
-        ? GridView.count(
-            crossAxisCount: 2,
+        ? LayoutBuilder(builder: (context, c) => GridView.count(
+            crossAxisCount: (c.maxWidth / 230).floor().clamp(2, 6),
             shrinkWrap: true,
             padding: EdgeInsets.zero,
             physics: const NeverScrollableScrollPhysics(),
@@ -113,7 +113,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
             crossAxisSpacing: 12,
             childAspectRatio: 1,
             children: [for (var i = 0; i < list.length; i++) FadeIn(index: i, child: Opacity(opacity: faded ? 0.72 : 1, child: ProjectTile(p: list[i])))],
-          )
+          ))
         : Column(children: [
             for (var i = 0; i < list.length; i++) FadeIn(index: i, child: Padding(padding: const EdgeInsets.only(bottom: 10), child: Opacity(opacity: faded ? 0.72 : 1, child: _SwipeProject(p: list[i])))),
           ]);
@@ -224,7 +224,8 @@ class _Board extends StatelessWidget {
   const _Board({required this.store});
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.of(context).size.width * 0.78;
+    final screen = MediaQuery.of(context).size.width;
+    final width = screen >= 700 ? 300.0 : screen * 0.78;
     return ListView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.fromLTRB(20, 4, 8, 110),
@@ -285,6 +286,7 @@ class ProjectCard extends StatelessWidget {
       child: InkWell(
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProjectDetail(id: p.id))),
         onLongPress: () => showProjectActions(context, p),
+        onSecondaryTap: () => showProjectActions(context, p), // right-click on computers
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           if (p.cover != null)
             SizedBox(
@@ -372,6 +374,7 @@ class ProjectTile extends StatelessWidget {
       child: InkWell(
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProjectDetail(id: p.id))),
         onLongPress: () => showProjectActions(context, p),
+        onSecondaryTap: () => showProjectActions(context, p), // right-click on computers
         child: Stack(fit: StackFit.expand, children: [
           if (onPhoto) ...[
             Image.network(cover!.url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: c.bg)),

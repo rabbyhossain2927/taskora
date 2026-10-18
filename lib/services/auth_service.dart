@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../config.dart';
 
@@ -11,6 +12,10 @@ class AuthService {
   static User? get user => _auth.currentUser;
 
   static Future<void> signInWithGoogle() async {
+    if (kIsWeb) {
+      await _auth.signInWithPopup(GoogleAuthProvider()..setCustomParameters({'prompt': 'select_account'}));
+      return;
+    }
     final acc = await google.signIn();
     if (acc == null) throw 'Sign-in cancelled';
     final a = await acc.authentication;
@@ -34,7 +39,7 @@ class AuthService {
 
   static Future<void> signOut() async {
     try {
-      await google.signOut();
+      if (!kIsWeb) await google.signOut();
     } catch (_) {}
     await _auth.signOut();
   }

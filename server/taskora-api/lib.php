@@ -4,7 +4,21 @@ declare(strict_types=1);
 
 if (basename($_SERVER['SCRIPT_FILENAME'] ?? '') === 'lib.php') { http_response_code(404); exit; }
 
-const SERVER_VERSION = '1.1.0';
+const SERVER_VERSION = '1.2.0';
+
+// Let the TaskOra website (taskora.rabbyhossain.com) talk to this API from the browser.
+(function (): void {
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    $allowed = ['https://taskora.rabbyhossain.com', 'https://rabbyhossain.com', 'https://www.rabbyhossain.com'];
+    if (in_array($origin, $allowed, true) || preg_match('#^http://(localhost|127\.0\.0\.1)(:\d+)?$#', $origin)) {
+        header("Access-Control-Allow-Origin: $origin");
+        header('Vary: Origin');
+        header('Access-Control-Allow-Headers: Authorization, X-Auth-Token, Content-Type');
+        header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+        header('Access-Control-Max-Age: 86400');
+    }
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') { http_response_code(204); exit; }
+})();
 
 if (!defined('NO_JSON_HEADER')) {
     header('Content-Type: application/json; charset=utf-8');
@@ -199,4 +213,70 @@ function maybe_self_update(): void {
     $st['shas'] = $shas;
     if ($changed) { $st['updated'] = time(); $st['last_changed'] = $changed; }
     @file_put_contents($state, json_encode($st), LOCK_EX);
+}
+
+/** Folder of the website (taskora.rabbyhossain.com). Can be changed with 'web_root' in config.php. */
+function web_root(): string {
+    $r = cfg('web_root');
+    return is_string($r) && $r !== '' ? rtrim($r, '/') : dirname(__DIR__, 2) . '/taskora.rabbyhossain.com';
+}
+
+function http_download(string $url, string $to): bool {
+    if (function_exists('curl_init')) {
+        $fh = @fopen($to, 'wb');
+        if (!$fh) return false;
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_FILE => $fh, CURLOPT_TIMEOUT => 180, CURLOPT_FOLLOWLOCATION => true, CURLOPT_USERAGENT => 'TaskOra-API']);
+        $ok = curl_exec($ch) !== false && curl_getinfo($ch, CURLINFO_HTTP_CODE) === 200;
+        curl_close($ch);
+        fclose($fh);
+        return $ok && filesize($to) > 0;
+    }
+    $body = @file_get_contents($url, false, stream_context_create(['http' => ['timeout' => 180, 'header' => "User-Agent: TaskOra-API\r\n"]]));
+    return $body !== false && @file_put_contents($to, $body) !== false;
+}
+
+/**
+ * Keeps the website up to date: GitHub builds it and attaches taskora-web.zip
+ * to the "web-latest" release; this downloads and unpacks it into web_root().
+ * Checks at most every 15 minutes (or once a minute when asked directly).
+ */
+function maybe_web_update(bool $now = false): array {
+    $repo = (string) (cfg('update_repo') ?? 'rabbyhossain2927/taskora');
+    if ($repo === '' || cfg('auto_update') === false) return ['status' => 'auto update is off'];
+    $state = __DIR__ . '/cache/web-state.json';
+    $st = is_file($state) ? (json_decode((string) file_get_contents($state), true) ?: []) : [];
+    if (time() - (int) ($st['checked'] ?? 0) < ($now ? 60 : 900)) return ['status' => 'checked recently'] + $st;
+    $st['checked'] = time();
+    @file_put_contents($state, json_encode($st), LOCK_EX);
+
+    $rel = http_get("https://api.github.com/repos/$repo/releases/tags/web-latest");
+    $r = $rel ? json_decode($rel, true) : null;
+    $asset = null;
+    foreach (($r['assets'] ?? []) as $a) if (($a['name'] ?? '') === 'taskora-web.zip') $asset = $a;
+    if (!$asset) return ['status' => 'no web build on GitHub yet'] + $st;
+    $stamp = $asset['id'] . '|' . $asset['updated_at'] . '|' . $asset['size'];
+    $root = web_root();
+    if (($st['stamp'] ?? '') === $stamp && is_file("$root/index.html")) return ['status' => 'up to date'] + $st;
+    if (!is_dir($root) && !@mkdir($root, 0755, true)) return ['status' => "can't create $root"] + $st;
+
+    $zip = __DIR__ . '/cache/taskora-web.zip';
+    if (!http_download((string) $asset['browser_download_url'], $zip)) return ['status' => 'download failed'] + $st;
+    $ok = false;
+    if (class_exists('ZipArchive')) {
+        $z = new ZipArchive();
+        if ($z->open($zip) === true) {
+            $ok = $z->locateName('index.html') !== false && $z->extractTo($root);
+            $z->close();
+        }
+    } elseif (class_exists('PharData')) {
+        try { (new PharData($zip))->extractTo($root, null, true); $ok = true; } catch (Throwable $e) { $ok = false; }
+    }
+    @unlink($zip);
+    if (!$ok) return ['status' => 'could not unpack (is the PHP zip extension on?)'] + $st;
+    if (is_file("$root/htaccess.txt")) @rename("$root/htaccess.txt", "$root/.htaccess");
+    $st['stamp'] = $stamp;
+    $st['updated'] = time();
+    @file_put_contents($state, json_encode($st), LOCK_EX);
+    return ['status' => 'updated'] + $st;
 }

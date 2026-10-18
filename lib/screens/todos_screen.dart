@@ -98,6 +98,7 @@ class _TodoRowState extends State<TodoRow> {
       borderRadius: BorderRadius.circular(16),
       onTap: widget.selecting ? widget.onSelectToggle : () => Navigator.push(context, MaterialPageRoute(builder: (_) => TodoEditor(id: t.id))),
       onLongPress: widget.selecting ? widget.onSelectToggle : () => showTodoActions(context, t, onSelect: widget.onStartSelect),
+      onSecondaryTap: widget.selecting ? widget.onSelectToggle : () => showTodoActions(context, t, onSelect: widget.onStartSelect), // right-click on computers
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         decoration: BoxDecoration(color: widget.selected ? context.tint : Colors.transparent, borderRadius: BorderRadius.circular(16)),

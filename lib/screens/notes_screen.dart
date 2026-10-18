@@ -99,15 +99,18 @@ class NotesGrid extends StatelessWidget {
         );
     if (!grid) return Column(children: [for (var i = 0; i < notes.length; i++) card(notes[i], i)]);
     return LayoutBuilder(builder: (context, c) {
-      final w = (c.maxWidth - 10) / 2;
-      final left = <Widget>[], right = <Widget>[];
+      // 2 columns on phones, more on wide screens
+      final n = (c.maxWidth / 250).floor().clamp(2, 6);
+      final w = (c.maxWidth - 10 * (n - 1)) / n;
+      final cols = List.generate(n, (_) => <Widget>[]);
       for (var i = 0; i < notes.length; i++) {
-        (i.isEven ? left : right).add(card(notes[i], i));
+        cols[i % n].add(card(notes[i], i));
       }
       return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(width: w, child: Column(children: left)),
-        const SizedBox(width: 10),
-        SizedBox(width: w, child: Column(children: right)),
+        for (var k = 0; k < n; k++) ...[
+          if (k > 0) const SizedBox(width: 10),
+          SizedBox(width: w, child: Column(children: cols[k])),
+        ],
       ]);
     });
   }
@@ -254,15 +257,15 @@ class _NotesScreenState extends State<NotesScreen> {
                   if (s.sections.isEmpty)
                     Box(padding: const EdgeInsets.all(16), child: Text('Group notes in folders, like “Client briefs” or “Ideas”. A folder can be pinned to Home.', style: TextStyle(color: context.mutedText, height: 1.5)))
                   else if (prefs.notesGrid)
-                    GridView.count(
-                      crossAxisCount: 2,
+                    LayoutBuilder(builder: (context, c) => GridView.count(
+                      crossAxisCount: (c.maxWidth / 210).floor().clamp(2, 6),
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       mainAxisSpacing: 10,
                       crossAxisSpacing: 10,
                       childAspectRatio: 1.7,
                       children: [for (var i = 0; i < s.sections.length; i++) FadeIn(index: i, child: _FolderCard(f: s.sections[i], count: s.notes.where((n) => n.sectionId == s.sections[i].id).length, color: i))],
-                    )
+                    ))
                   else
                     Box(
                       padding: EdgeInsets.zero,
@@ -448,6 +451,7 @@ class NoteCard extends StatelessWidget {
         child: InkWell(
           onTap: selecting ? onToggle : () => Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditor(id: n.id))),
           onLongPress: selecting ? onToggle : () => showNoteActions(context, n, onSelect: onStartSelect),
+          onSecondaryTap: selecting ? onToggle : () => showNoteActions(context, n, onSelect: onStartSelect), // right-click on computers
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             width: double.infinity,

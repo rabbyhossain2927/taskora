@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -134,6 +135,7 @@ class ProfileScreen extends StatelessWidget {
                     const Divider(),
                     RowTile(icon: Icons.chat_bubble_outline_rounded, color: 8, title: 'Send feedback', subtitle: 'Report a problem or share an idea', onTap: () => _open(context, const FeedbackScreen())),
                     const Divider(),
+                    if (!kIsWeb)
                     FutureBuilder<UpdateInfo?>(
                       future: UpdateService.cachedCheck(),
                       builder: (_, snap) => RowTile(
@@ -150,7 +152,7 @@ class ProfileScreen extends StatelessWidget {
                         onTap: () => _open(context, const UpdateScreen()),
                       ),
                     ),
-                    const Divider(),
+                    if (!kIsWeb) const Divider(),
                     RowTile(icon: Icons.auto_awesome_outlined, color: 6, title: 'What’s new', onTap: () => _open(context, const WhatsNewScreen())),
                     const Divider(),
                     RowTile(icon: Icons.info_outline_rounded, color: 19, title: 'About', onTap: () => _open(context, const AboutScreen())),

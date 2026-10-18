@@ -57,10 +57,7 @@ class HomeScreen extends StatelessWidget {
     final g = _greeting();
     var i = 0;
 
-    return SafeArea(
-      bottom: false,
-      child: SyncRefresh(
-        child: ListView(padding: const EdgeInsets.fromLTRB(20, 10, 20, 120), children: [
+    final top = <Widget>[
           // ---------- greeting ----------
           FadeIn(
             index: i++,
@@ -117,7 +114,8 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-
+    ];
+    final left = <Widget>[
           // ---------- today ----------
           FadeIn(index: i++, child: _TodayCard(total: total, done: doneToday, due: dueToday.length, active: active.length, notes: s.notes.length)),
           const SizedBox(height: 12),
@@ -157,6 +155,8 @@ class HomeScreen extends StatelessWidget {
             ),
           ],
 
+    ];
+    final right = <Widget>[
           // ---------- projects ----------
           if (active.isNotEmpty) ...[
             FadeIn(index: i++, child: Label('Active projects', trailing: _SeeAll(onTap: () => ShellState.of(context)?.go(1)))),
@@ -193,7 +193,27 @@ class HomeScreen extends StatelessWidget {
             FadeIn(index: i++, child: const Label('From your notes')),
             for (final sec in homeSections) FadeIn(index: i++, child: _HomeSection(sec: sec)),
           ],
-        ]),
+    ];
+    return SafeArea(
+      bottom: false,
+      child: SyncRefresh(
+        child: LayoutBuilder(builder: (context, c) {
+          // Wide screens: two columns side by side.
+          final wide = c.maxWidth >= 980;
+          return ListView(
+            padding: EdgeInsets.fromLTRB(wide ? 28 : 20, 10, wide ? 28 : 20, 120),
+            children: wide
+                ? [
+                    ...top,
+                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: left)),
+                      const SizedBox(width: 24),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: right)),
+                    ]),
+                  ]
+                : [...top, ...left, ...right],
+          );
+        }),
       ),
     );
   }
@@ -436,8 +456,8 @@ class _HomeSection extends StatelessWidget {
         if (notes.isEmpty)
           Box(padding: const EdgeInsets.all(14), child: Text('No notes in this folder yet.', style: TextStyle(color: context.mutedText, fontSize: 13)))
         else
-          GridView.count(
-            crossAxisCount: 2,
+          LayoutBuilder(builder: (context, c) => GridView.count(
+            crossAxisCount: (c.maxWidth / 190).floor().clamp(2, 4),
             shrinkWrap: true,
             padding: EdgeInsets.zero,
             physics: const NeverScrollableScrollPhysics(),
@@ -445,7 +465,7 @@ class _HomeSection extends StatelessWidget {
             crossAxisSpacing: 10,
             childAspectRatio: 1.05,
             children: [for (final n in notes) _HomeNote(n: n)],
-          ),
+          )),
       ]),
     );
   }

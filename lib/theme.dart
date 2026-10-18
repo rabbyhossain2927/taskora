@@ -257,7 +257,8 @@ class BackgroundPageTransitionsBuilder extends PageTransitionsBuilder {
         opacity: inA,
         child: SlideTransition(
           position: Tween(begin: Offset.zero, end: const Offset(-0.05, 0)).animate(outA),
-          child: AppBackground(t: t, dark: dark, style: style, child: child),
+          // Pages opened on top get a readable width on big screens.
+          child: AppBackground(t: t, dark: dark, style: style, constrain: !route.isFirst, child: child),
         ),
       ),
     );
@@ -269,13 +270,18 @@ class AppBackground extends StatelessWidget {
   final bool dark;
   final String style;
   final Widget child;
-  const AppBackground({super.key, required this.t, required this.dark, required this.style, required this.child});
+  final bool constrain;
+  const AppBackground({super.key, required this.t, required this.dark, required this.style, required this.child, this.constrain = false});
   @override
   Widget build(BuildContext context) {
     final base = dark ? const Color(0xFF111117) : C.bg;
+    final wide = constrain && MediaQuery.sizeOf(context).width >= 1000;
     return DecoratedBox(
       decoration: BoxDecoration(color: base),
-      child: CustomPaint(painter: _BgPainter(t.accent, dark, style), child: child),
+      child: CustomPaint(
+        painter: _BgPainter(t.accent, dark, style),
+        child: wide ? Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 980), child: child)) : child,
+      ),
     );
   }
 }

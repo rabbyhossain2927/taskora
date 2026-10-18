@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../platform/web_tools.dart';
 import 'package:uuid/uuid.dart';
 import '../models.dart';
 import 'api.dart';
@@ -74,12 +76,21 @@ class Store extends ChangeNotifier {
     _init();
   }
 
+  String get _webKey => 'taskora_db_${uid.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '')}';
+
+  Future<String?> _readSaved() async {
+    if (kIsWeb) return (await SharedPreferences.getInstance()).getString(_webKey);
+    final dir = await getApplicationDocumentsDirectory();
+    _file = File('${dir.path}/taskora_${uid.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '')}.json');
+    return await _file!.exists() ? await _file!.readAsString() : null;
+  }
+
   Future<void> _init() async {
+    if (kIsWeb) onPageHide(() => flush());
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      _file = File('${dir.path}/taskora_${uid.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '')}.json');
-      if (await _file!.exists()) {
-        final j = jsonDecode(await _file!.readAsString()) as Map<String, dynamic>;
+      final saved = await _readSaved();
+      if (saved != null) {
+        final j = jsonDecode(saved) as Map<String, dynamic>;
         (j['data'] as Map? ?? {}).forEach((col, docs) {
           _data[col as String] = {for (final e in (docs as Map).entries) e.key as String: Map<String, dynamic>.from(e.value as Map)};
         });
@@ -126,17 +137,29 @@ class Store extends ChangeNotifier {
     _saveTimer = Timer(const Duration(milliseconds: 300), _writeFile);
   }
 
+  bool _wiped = false;
+
   Future<void> _writeFile() async {
+    if (_wiped) return;
+    final body = jsonEncode({
+      'data': _data,
+      'outbox': _outbox,
+      'cursor': _cursor,
+      'lastSyncedAt': lastSyncedAt?.millisecondsSinceEpoch,
+    });
+    if (kIsWeb) {
+      try {
+        await (await SharedPreferences.getInstance()).setString(_webKey, body);
+      } catch (e) {
+        debugPrint('Browser save failed: $e');
+      }
+      return;
+    }
     final f = _file;
     if (f == null) return;
     try {
       final tmp = File('${f.path}.tmp');
-      await tmp.writeAsString(jsonEncode({
-        'data': _data,
-        'outbox': _outbox,
-        'cursor': _cursor,
-        'lastSyncedAt': lastSyncedAt?.millisecondsSinceEpoch,
-      }));
+      await tmp.writeAsString(body);
       await tmp.rename(f.path); // atomic: never leaves a half-written file
     } catch (e) {
       debugPrint('Local save failed: $e');
@@ -518,9 +541,14 @@ class Store extends ChangeNotifier {
     _outbox.clear();
     _cursor = '0';
     try {
-      await _file?.delete();
+      if (kIsWeb) {
+        await (await SharedPreferences.getInstance()).remove(_webKey);
+      } else {
+        await _file?.delete();
+      }
     } catch (_) {}
     _file = null;
+    _wiped = true;
     _rebuild();
   }
 }

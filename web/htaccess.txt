@@ -1,0 +1,28 @@
+# TaskOra web app (renamed to .htaccess on the server)
+Options -Indexes
+DirectoryIndex index.html
+
+# Always use https
+RewriteEngine On
+RewriteCond %{HTTPS} !=on
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Unknown paths open the app
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.html [L]
+
+<IfModule mod_headers.c>
+  # These must always be fresh so updates show up
+  <FilesMatch "^(index\.html|flutter_service_worker\.js|flutter_bootstrap\.js|version\.json|manifest\.json)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </FilesMatch>
+  <FilesMatch "\.(js|wasm|png|svg|ttf|otf|woff2?|json|frag|bin)$">
+    Header set X-Content-Type-Options "nosniff"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_mime.c>
+  AddType application/wasm .wasm
+  AddType application/manifest+json .webmanifest
+</IfModule>

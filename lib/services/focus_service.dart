@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'notify_service.dart';
@@ -69,6 +70,7 @@ class FocusEngine {
 
   static Future<void> stop(SharedPreferences p) async {
     await p.setString(_state, 'idle');
+    if (kIsWeb) return;
     await NotifyService.plugin.cancel(ongoingId);
     await NotifyService.plugin.cancel(doneId);
   }
@@ -80,7 +82,7 @@ class FocusEngine {
     if (l.length > 400) l.removeRange(0, l.length - 400);
     await p.setStringList(_log, l);
     await p.setString(_state, 'idle');
-    await NotifyService.plugin.cancel(ongoingId);
+    if (!kIsWeb) await NotifyService.plugin.cancel(ongoingId);
   }
 
   static Future<void> handleAction(SharedPreferences p, String action) async {
@@ -107,6 +109,7 @@ class FocusEngine {
 
   /// The live notification with the countdown and buttons.
   static Future<void> show(SharedPreferences p) async {
+    if (kIsWeb) return; // the browser tab title shows the countdown instead
     final s = state(p);
     await NotifyService.plugin.cancel(doneId);
     if (s == 'idle') {
@@ -246,6 +249,11 @@ class FocusService extends ChangeNotifier {
       onFinished?.call(m, t);
     }
     final st = state;
+    if (kIsWeb && (st != 'idle' || st != _lastState)) {
+      SystemChrome.setApplicationSwitcherDescription(ApplicationSwitcherDescription(
+        label: st == 'idle' ? 'TaskOra' : '${FocusEngine.fmt(leftMs)}${st == 'paused' ? ' (paused)' : ''} · ${FocusEngine.modeName(mode)} — TaskOra',
+      ));
+    }
     if (st != 'idle' || st != _lastState) notifyListeners();
     _lastState = st;
   }

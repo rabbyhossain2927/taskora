@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/notify_service.dart';
@@ -17,7 +18,7 @@ class UpdatePrompt {
 
   static Future<void> checkInBackground(BuildContext context) async {
     final prefs = Prefs.instance;
-    if (!prefs.autoUpdateCheck || _showing) return;
+    if (kIsWeb || !prefs.autoUpdateCheck || _showing) return; // the website is always the newest version
     final now = DateTime.now().millisecondsSinceEpoch;
     // Every app start; when coming back to the app, at most once an hour.
     if (_checkedThisLaunch && now - prefs.lastUpdateCheck < const Duration(hours: 1).inMilliseconds) return;

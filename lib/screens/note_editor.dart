@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -7,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../icons.dart';
 import '../models.dart';
+import '../services/api.dart';
 import '../services/file_service.dart';
 import '../services/store.dart';
 import '../theme.dart';
@@ -349,7 +351,18 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       },
       child: Scaffold(
         backgroundColor: bg,
-        body: SafeArea(
+        body: CallbackShortcuts(
+          // Keyboard shortcuts on computers
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.keyB, control: true): () => _apply((c) => c.toggleBold()),
+            const SingleActivator(LogicalKeyboardKey.keyB, meta: true): () => _apply((c) => c.toggleBold()),
+            const SingleActivator(LogicalKeyboardKey.digit1, control: true, alt: true): () => _apply((c) => c.setLineStyle('h1')),
+            const SingleActivator(LogicalKeyboardKey.digit2, control: true, alt: true): () => _apply((c) => c.setLineStyle('h2')),
+            const SingleActivator(LogicalKeyboardKey.digit0, control: true, alt: true): () => _apply((c) => c.setLineStyle('normal')),
+            const SingleActivator(LogicalKeyboardKey.digit9, control: true, alt: true): () => _apply((c) => c.setLineStyle('small')),
+            const SingleActivator(LogicalKeyboardKey.digit8, control: true, shift: true): () => _apply((c) => c.toggleBullets()),
+          },
+          child: SafeArea(
           child: Column(children: [
             Header('', actions: [
               RoundButton(
@@ -497,6 +510,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
               ),
             ),
           ]),
+        ),
         ),
       ),
     );
@@ -742,6 +756,15 @@ class LinkPreview extends StatelessWidget {
   static final _cache = <String, Future<(String, String, String)>>{};
 
   static Future<(String, String, String)> _fetch(String url) async {
+    if (kIsWeb) {
+      // Browsers can't read other websites, so your server fetches the preview.
+      try {
+        final j = await Api.post('preview.php', {'url': url});
+        return ((j['title'] ?? '').toString(), (j['description'] ?? '').toString(), (j['image'] ?? '').toString());
+      } catch (_) {
+        return ('', '', '');
+      }
+    }
     try {
       final r = await http.get(Uri.parse(url), headers: {'User-Agent': 'Mozilla/5.0 TaskOra'}).timeout(const Duration(seconds: 8));
       final html = utf8.decode(r.bodyBytes, allowMalformed: true);

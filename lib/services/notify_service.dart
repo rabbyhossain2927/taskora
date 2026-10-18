@@ -1,4 +1,5 @@
 import 'dart:ui' show DartPluginRegistrant;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,6 +34,7 @@ class NotifyService {
       plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
 
   static Future<void> initPlugin({bool background = false}) async {
+    if (kIsWeb) return;
     tzdata.initializeTimeZones();
     const settings = InitializationSettings(android: AndroidInitializationSettings(icon));
     await plugin.initialize(
@@ -43,6 +45,7 @@ class NotifyService {
   }
 
   static Future<void> init() async {
+    if (kIsWeb) return;
     await initPlugin();
     // Create the channels up front so they appear in the phone's settings.
     final a = _android;
@@ -73,16 +76,19 @@ class NotifyService {
   /// Asks Android for permission to show notifications (Android 13+) and
   /// to ring reminders on time. Call once the app is on screen.
   static Future<bool> requestPermission() async {
+    if (kIsWeb) return false;
     final a = _android;
     if (a == null) return true;
     final ok = await a.requestNotificationsPermission() ?? false;
     return ok;
   }
 
-  static Future<bool> enabled() async => await _android?.areNotificationsEnabled() ?? true;
+  static Future<bool> enabled() async => kIsWeb ? false : await _android?.areNotificationsEnabled() ?? true;
 
-  static Future<bool> canExact() async => await _android?.canScheduleExactNotifications() ?? true;
-  static Future<void> askExact() async => _android?.requestExactAlarmsPermission();
+  static Future<bool> canExact() async => kIsWeb ? true : await _android?.canScheduleExactNotifications() ?? true;
+  static Future<void> askExact() async => kIsWeb ? null : _android?.requestExactAlarmsPermission();
+
+  static Future<void> cancelAll() async => kIsWeb ? null : plugin.cancelAll();
 
   static int _idFor(String key) => key.hashCode & 0x7fffffff;
 
@@ -98,6 +104,7 @@ class NotifyService {
   /// Schedules at an exact time; falls back to "about then" if the phone
   /// doesn't allow exact alarms.
   static Future<void> schedule(int id, String title, String body, DateTime when, NotificationDetails details, {String? payload}) async {
+    if (kIsWeb) return;
     final at = tz.TZDateTime.from(when, tz.local);
     try {
       await plugin.zonedSchedule(id, title, body, at, details,
@@ -113,6 +120,7 @@ class NotifyService {
   }
 
   static Future<void> scheduleFor(String id, String title, String body, DateTime? when) async {
+    if (kIsWeb) return;
     await cancelFor(id);
     if (when == null || !_on || !Prefs.instance.remindersOn || when.isBefore(DateTime.now())) return;
     try {
@@ -122,10 +130,11 @@ class NotifyService {
     }
   }
 
-  static Future<void> cancelFor(String id) => plugin.cancel(_idFor(id));
+  static Future<void> cancelFor(String id) async => kIsWeb ? null : plugin.cancel(_idFor(id));
 
   /// Shows any in-app notice in the phone's notification panel too.
   static Future<void> showNotice(String title, String body) async {
+    if (kIsWeb) return;
     if (!_on || !Prefs.instance.appNews) return;
     try {
       await plugin.show(DateTime.now().millisecondsSinceEpoch & 0x7fffffff, title, body, const NotificationDetails(android: _general), payload: 'notice');
@@ -133,6 +142,7 @@ class NotifyService {
   }
 
   static Future<void> showUpdate(String version, String summary) async {
+    if (kIsWeb) return;
     if (!_on) return;
     await plugin.show(
       777,
@@ -146,6 +156,7 @@ class NotifyService {
   /// "Send a test" on the notification settings page. Ignores the on/off
   /// switches so you can check the phone side works.
   static Future<void> test({int inSeconds = 0}) async {
+    if (kIsWeb) return;
     const d = NotificationDetails(android: _reminders);
     if (inSeconds == 0) {
       await plugin.show(778, 'TaskOra test 🔔', 'Notifications are working on this phone.', d, payload: 'notice');

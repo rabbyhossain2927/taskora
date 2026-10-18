@@ -13,7 +13,7 @@ class ImportService {
 
   /// Lets you pick one or more files; returns how many notes were made.
   static Future<int> pickAndImport(Store store, {String? folderId}) async {
-    final r = await FilePicker.platform.pickFiles(allowMultiple: true, type: FileType.custom, allowedExtensions: extensions, withData: false);
+    final r = await FilePicker.platform.pickFiles(allowMultiple: true, type: FileType.custom, allowedExtensions: extensions, withData: true);
     if (r == null) return 0;
     var made = 0;
     final failed = <String>[];

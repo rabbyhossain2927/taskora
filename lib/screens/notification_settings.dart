@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/notify_service.dart';
@@ -72,7 +73,16 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
           const Header('Notification settings'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            child: kIsWeb
+                ? Box(
+                    color: context.tint,
+                    child: Row(children: [
+                      Icon(Icons.phone_android_rounded, color: context.onTint),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text('Reminders and the focus timer notify you on your phone. In the web version, the focus countdown shows in this browser tab’s title.', style: TextStyle(color: context.onTint, height: 1.45))),
+                    ]),
+                  )
+                : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               // Master switch
               AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
@@ -101,7 +111,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                         await _reschedule();
                         _check();
                       } else {
-                        await NotifyService.plugin.cancelAll();
+                        await NotifyService.cancelAll();
                       }
                     },
                   ),

@@ -30,6 +30,7 @@ class BackupService {
 
   /// Called when the app opens. Runs whichever backups are due, silently.
   static Future<void> runAutoBackups(Store store) async {
+    if (kIsWeb) return;
     final p = Prefs.instance;
     final now = DateTime.now().millisecondsSinceEpoch;
     try {

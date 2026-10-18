@@ -21,4 +21,8 @@ return [
     // Keep this server folder updated from GitHub automatically
     'auto_update' => true,
     'update_repo' => 'rabbyhossain2927/taskora',
+
+    // Optional: folder of the TaskOra website. Leave out to use
+    // /home/<you>/taskora.rabbyhossain.com
+    // 'web_root' => '/home/rabbyhossain/taskora.rabbyhossain.com',
 ];
