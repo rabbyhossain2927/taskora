@@ -38,9 +38,9 @@ dependencies:
     sdk: flutter
   googleapis_auth: ^1.6.0
 
-# The note editor's Windows helper needs this version (newer ones removed a name it uses).
+# The note editor's Windows helper needs a newer version than other packages ask for.
 dependency_overrides:
-  win32: 5.5.4
+  win32: ">=5.9.0 <5.11.0"
 
 dev_dependencies:
   flutter_test:
