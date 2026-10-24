@@ -77,16 +77,19 @@ class HomeScreen extends StatelessWidget {
                   Text(first.isEmpty ? 'Welcome' : first, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.2)),
                 ]),
               ),
-              RoundButton(icon: Icons.calendar_month_outlined, tooltip: 'Calendar', onTap: () => _open(context, const CalendarScreen())),
-              const SizedBox(width: 8),
-              Badge(
-                isLabelVisible: s.unreadCount > 0,
-                label: Text('${s.unreadCount}'),
-                backgroundColor: C.red,
-                child: RoundButton(icon: Icons.notifications_none_rounded, tooltip: 'Notifications', onTap: () => _open(context, const NotificationsScreen())),
-              ),
-              const SizedBox(width: 8),
-              const ProfileButton(),
+              // On computers these live in the sidebar.
+              if (!isDesktop(context)) ...[
+                RoundButton(icon: Icons.calendar_month_outlined, tooltip: 'Calendar', onTap: () => _open(context, const CalendarScreen())),
+                const SizedBox(width: 8),
+                Badge(
+                  isLabelVisible: s.unreadCount > 0,
+                  label: Text('${s.unreadCount}'),
+                  backgroundColor: C.red,
+                  child: RoundButton(icon: Icons.notifications_none_rounded, tooltip: 'Notifications', onTap: () => _open(context, const NotificationsScreen())),
+                ),
+                const SizedBox(width: 8),
+                const ProfileButton(),
+              ],
             ]),
           ),
           const SizedBox(height: 14),
@@ -201,7 +204,7 @@ class HomeScreen extends StatelessWidget {
           // Wide screens: two columns side by side.
           final wide = c.maxWidth >= 980;
           return ListView(
-            padding: EdgeInsets.fromLTRB(wide ? 28 : 20, 10, wide ? 28 : 20, 120),
+            padding: EdgeInsets.fromLTRB(wide ? 28 : 20, isDesktop(context) ? 22 : 10, wide ? 28 : 20, isDesktop(context) ? 40 : 120),
             children: wide
                 ? [
                     ...top,
@@ -486,6 +489,8 @@ class _HomeNote extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditor(id: n.id))),
+        onLongPress: () => showNoteActions(context, n),
+        onSecondaryTap: () => showNoteActions(context, n),
         child: Container(
           decoration: BoxDecoration(borderRadius: BorderRadius.circular(20), border: Border.all(color: context.isDark ? Colors.white10 : C.line)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

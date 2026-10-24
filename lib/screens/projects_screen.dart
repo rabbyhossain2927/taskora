@@ -104,16 +104,19 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     final board = view == 'board';
     final grid = view == 'grid';
     Widget cards(List<Project> list, {bool faded = false}) => grid
-        ? LayoutBuilder(builder: (context, c) => GridView.count(
-            crossAxisCount: (c.maxWidth / 230).floor().clamp(2, 6),
-            shrinkWrap: true,
-            padding: EdgeInsets.zero,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 1,
-            children: [for (var i = 0; i < list.length; i++) FadeIn(index: i, child: Opacity(opacity: faded ? 0.72 : 1, child: ProjectTile(p: list[i])))],
-          ))
+        ? LayoutBuilder(builder: (context, c) {
+            final n = (c.maxWidth / 230).floor().clamp(2, 6);
+            final w = (c.maxWidth - 12 * (n - 1)) / n;
+            return GridView.builder(
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              physics: const NeverScrollableScrollPhysics(),
+              // square cover + info card below it
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: n, mainAxisSpacing: 12, crossAxisSpacing: 12, mainAxisExtent: w + ProjectTile.infoHeight),
+              itemCount: list.length,
+              itemBuilder: (_, i) => FadeIn(index: i, child: Opacity(opacity: faded ? 0.72 : 1, child: ProjectTile(p: list[i]))),
+            );
+          })
         : Column(children: [
             for (var i = 0; i < list.length; i++) FadeIn(index: i, child: Padding(padding: const EdgeInsets.only(bottom: 10), child: Opacity(opacity: faded ? 0.72 : 1, child: _SwipeProject(p: list[i])))),
           ]);
@@ -352,10 +355,11 @@ class ProjectCard extends StatelessWidget {
   }
 }
 
-/// Square card for the grid: the cover photo fills it.
+/// Grid card: a square (1:1) cover on top, the project's details below it.
 class ProjectTile extends StatelessWidget {
   final Project p;
   const ProjectTile({super.key, required this.p});
+  static const infoHeight = 98.0;
   @override
   Widget build(BuildContext context) {
     final s = context.watch<Store>();
@@ -364,71 +368,76 @@ class ProjectTile extends StatelessWidget {
     final tasks = s.todosOf(p.id);
     final st = s.status(p.status);
     final cover = p.cover;
-    final onPhoto = cover != null;
-    final fg = onPhoto ? Colors.white : (context.isDark ? Colors.white : C.ink);
-    final sub = onPhoto ? Colors.white.withOpacity(0.85) : (context.isDark ? Colors.white70 : c.fg);
     return Material(
-      color: context.isDark ? c.fg.withOpacity(0.22) : c.bg,
-      borderRadius: BorderRadius.circular(24),
+      color: context.surface,
+      borderRadius: BorderRadius.circular(22),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProjectDetail(id: p.id))),
         onLongPress: () => showProjectActions(context, p),
-        onSecondaryTap: () => showProjectActions(context, p), // right-click on computers
-        child: Stack(fit: StackFit.expand, children: [
-          if (onPhoto) ...[
-            Image.network(cover!.url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: c.bg)),
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, stops: [0, 0.35, 1], colors: [Color(0x55000000), Color(0x00000000), Color(0xCC000000)]),
-              ),
-            ),
-          ] else
-            Positioned(right: -18, bottom: -18, child: Icon(iconOf(p.icon), size: 110, color: c.fg.withOpacity(context.isDark ? 0.18 : 0.10))),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
+        onSecondaryTap: () => showProjectActions(context, p),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          AspectRatio(
+            aspectRatio: 1,
+            child: Stack(fit: StackFit.expand, children: [
+              if (cover != null)
+                Image.network(cover.url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: c.bg))
+              else
                 Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(onPhoto ? 0.92 : 0.8), borderRadius: BorderRadius.circular(10)),
-                  child: Icon(iconOf(p.icon), size: 17, color: c.fg),
+                  color: context.isDark ? c.fg.withOpacity(0.22) : c.bg,
+                  child: Center(child: Icon(iconOf(p.icon), size: 54, color: context.isDark ? Colors.white70 : c.fg.withOpacity(0.55))),
                 ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(onPhoto ? 0.92 : 0.8), borderRadius: BorderRadius.circular(10)),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Container(width: 6, height: 6, decoration: BoxDecoration(color: priorityColor(p.priority), shape: BoxShape.circle)),
-                    const SizedBox(width: 4),
-                    Text(st.label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: pastel(st.color).fg)),
-                  ]),
-                ),
-              ]),
-              const Spacer(),
-              Text(p.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5, height: 1.2, color: fg, decoration: p.done ? TextDecoration.lineThrough : null, decorationColor: fg)),
-              const SizedBox(height: 8),
-              TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: pr),
-                duration: const Duration(milliseconds: 700),
-                curve: Curves.easeOutCubic,
-                builder: (_, v, __) => ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(value: v, minHeight: 5, color: onPhoto ? Colors.white : c.fg, backgroundColor: onPhoto ? Colors.white30 : Colors.white70),
-                ),
+              Positioned(
+                left: 10,
+                right: 10,
+                top: 10,
+                child: Row(children: [
+                  if (cover != null)
+                    Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.92), borderRadius: BorderRadius.circular(10)),
+                      child: Icon(iconOf(p.icon), size: 16, color: c.fg),
+                    ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.92), borderRadius: BorderRadius.circular(10)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Container(width: 6, height: 6, decoration: BoxDecoration(color: priorityColor(p.priority), shape: BoxShape.circle)),
+                      const SizedBox(width: 4),
+                      Text(st.label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: pastel(st.color).fg)),
+                    ]),
+                  ),
+                ]),
               ),
-              const SizedBox(height: 6),
-              Row(children: [
-                Text('${tasks.where((t) => t.done).length}/${tasks.length}', style: TextStyle(fontSize: 11, color: sub, fontWeight: FontWeight.w600)),
-                const Spacer(),
-                if (p.deadline != null) ...[
-                  Icon(Icons.event_outlined, size: 11, color: sub),
-                  const SizedBox(width: 2),
-                  Flexible(child: Text(fmtDue(p.deadline!), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: sub, fontWeight: FontWeight.w600))),
-                ],
-              ]),
             ]),
+          ),
+          SizedBox(
+            height: infoHeight,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(p.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, height: 1.25, decoration: p.done ? TextDecoration.lineThrough : null)),
+                const Spacer(),
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: pr),
+                  duration: const Duration(milliseconds: 700),
+                  curve: Curves.easeOutCubic,
+                  builder: (_, v, __) => ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: v, minHeight: 5, color: c.fg, backgroundColor: c.bg)),
+                ),
+                const SizedBox(height: 6),
+                Row(children: [
+                  Text('${tasks.where((t) => t.done).length}/${tasks.length} tasks', style: TextStyle(fontSize: 11, color: context.mutedText, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  if (p.deadline != null) ...[
+                    Icon(Icons.event_outlined, size: 11, color: context.mutedText),
+                    const SizedBox(width: 2),
+                    Flexible(child: Text(fmtDue(p.deadline!), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: context.mutedText, fontWeight: FontWeight.w600))),
+                  ],
+                ]),
+              ]),
+            ),
           ),
         ]),
       ),

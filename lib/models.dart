@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 DateTime? _d(dynamic v) {
   if (v == null) return null;
   if (v is Map && v['__ts'] is String) return DateTime.tryParse(v['__ts'] as String); // old backups
@@ -220,7 +222,8 @@ class Attachment {
 }
 
 /// One piece of a note.
-/// type: text | bullets | check | dropdown | link | file
+/// type: doc (rich text, the main one) | text (older plain text) | bullets |
+///       check | dropdown | link | file
 class NoteBlock {
   String type;
   String text; // text body, dropdown title, or link URL
@@ -289,9 +292,22 @@ class Note {
   /// Blocks of the first tab (cards and previews use these).
   List<NoteBlock> get blocks => tabs.first.blocks;
   List<NoteBlock> get allBlocks => [for (final t in tabs) ...t.blocks];
-  String get preview => blocks.where((b) => b.type == 'text').map((b) => stripMarks(b.text)).join(' ').trim();
+  String get preview => blocks.where((b) => b.type == 'text' || b.type == 'doc').map((b) => stripMarks(b.text)).join(' ').trim();
   String get allText => allBlocks.map((b) => b.plain).join(' ');
-  Attachment? get firstImage => allBlocks.map((b) => b.file).whereType<Attachment>().where((f) => f.isImage).firstOrNull;
+  Attachment? get firstImage {
+    for (final b in allBlocks) {
+      if (b.file != null && b.file!.isImage) return b.file;
+      if (b.type == 'doc' && b.body.contains('"image"')) {
+        try {
+          for (final o in jsonDecode(b.body) as List) {
+            final ins = (o as Map)['insert'];
+            if (ins is Map && ins['image'] is String) return Attachment(id: '', name: 'image', mime: 'image/*', size: 0, url: ins['image'] as String);
+          }
+        } catch (_) {}
+      }
+    }
+    return null;
+  }
 
   Map<String, dynamic> toMap() => {
         'title': title, 'sectionId': sectionId, 'color': color, 'icon': icon, 'tags': tags,

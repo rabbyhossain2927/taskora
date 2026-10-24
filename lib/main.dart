@@ -1,6 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_quill/translations.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'screens/auth_screens.dart';
@@ -16,6 +20,8 @@ import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // On the website, right-click opens TaskOra's own menus instead of the browser's.
+  if (kIsWeb) await BrowserContextMenu.disableContextMenu();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   // Firebase is used ONLY for Google / email sign-in. Data syncs with your own server (see Config.apiBase).
   await Prefs.init();
@@ -74,6 +80,13 @@ class TaskOraApp extends StatelessWidget {
       theme: buildTheme(t, Brightness.light, bgStyle: prefs.bgStyle),
       darkTheme: buildTheme(t, Brightness.dark, bgStyle: prefs.bgStyle),
       themeMode: prefs.mode,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        FlutterQuillLocalizations.delegate,
+      ],
+      supportedLocales: const [Locale('en')],
       builder: (context, child) {
         // Archivo is a wide font: show all text a little smaller.
         final mq = MediaQuery.of(context);

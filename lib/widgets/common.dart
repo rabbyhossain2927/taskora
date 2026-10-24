@@ -18,6 +18,9 @@ extension Ctx on BuildContext {
   Store get store => read<Store>();
 }
 
+/// Wide screens (computers, tablets) use the sidebar layout.
+bool isDesktop(BuildContext context) => MediaQuery.sizeOf(context).width >= 700;
+
 final dShort = DateFormat('d MMM');
 final dLong = DateFormat('EEE, d MMM y');
 final dTime = DateFormat('d MMM, h:mm a');
@@ -742,7 +745,8 @@ class MainHeader extends StatelessWidget {
             ]),
           ),
           ...actions.expand((a) => [a, const SizedBox(width: 8)]),
-          const ProfileButton(),
+          // On computers the profile is in the sidebar.
+          if (!isDesktop(context)) const ProfileButton(),
         ]),
       );
 }

@@ -38,7 +38,7 @@ class _BackupScreenState extends State<BackupScreen> {
     } catch (_) {}
     if (mounted) setState(() {});
     try {
-      if (Prefs.instance.driveAuto) drive = await BackupService.listDrive();
+      if ((Prefs.instance.driveAuto && !kIsWeb) || BackupService.webDriveReady) drive = await BackupService.listDrive();
     } catch (_) {}
     try {
       storage = await FileService.usage();
@@ -73,6 +73,19 @@ class _BackupScreenState extends State<BackupScreen> {
     } finally {
       if (mounted) setState(() => busyLocal = false);
       _load();
+    }
+  }
+
+  /// Website: connect Google Drive (a Google popup) and list the backups there.
+  Future<void> _showDrive() async {
+    setState(() => busyDrive = true);
+    try {
+      drive = await BackupService.listDrive(interactive: true);
+      if (mounted && drive.isEmpty) toast(context, 'No backups on Google Drive yet');
+    } catch (e) {
+      if (mounted) toast(context, BackupService.friendlyDriveError(e));
+    } finally {
+      if (mounted) setState(() => busyDrive = false);
     }
   }
 
@@ -219,14 +232,23 @@ class _BackupScreenState extends State<BackupScreen> {
                   ),
                 ),
 
-                // ---------- google drive (phone only) ----------
-                if (!kIsWeb) ...[
+                // ---------- google drive ----------
+                ...[
                 const Label('Google Drive'),
                 FadeIn(
                   index: 2,
                   child: Box(
                     padding: EdgeInsets.zero,
                     child: Column(children: [
+                      if (kIsWeb)
+                        RowTile(
+                          icon: Icons.folder_open_rounded,
+                          color: 12,
+                          title: 'Show my Drive backups',
+                          subtitle: 'Private app folder · last: ${_when(p.lastDrive)}',
+                          onTap: busyDrive ? null : _showDrive,
+                        )
+                      else
                       RowTile(
                         icon: Icons.add_to_drive_rounded,
                         color: 12,
@@ -234,7 +256,7 @@ class _BackupScreenState extends State<BackupScreen> {
                         subtitle: 'Private app folder · last: ${_when(p.lastDrive)}',
                         trailing: Switch(value: p.driveAuto, onChanged: (v) => p.driveAuto = v),
                       ),
-                      if (p.driveAuto) ...[
+                      if (p.driveAuto && !kIsWeb) ...[
                         const Divider(),
                         DropdownTile<String>(
                           icon: Icons.schedule_rounded,
@@ -274,7 +296,7 @@ class _BackupScreenState extends State<BackupScreen> {
                   ),
                 ),
                 ],
-                if (drive.isNotEmpty && !kIsWeb) ...[
+                if (drive.isNotEmpty) ...[
                   Label('On Google Drive · ${drive.length}'),
                   Box(
                     padding: EdgeInsets.zero,

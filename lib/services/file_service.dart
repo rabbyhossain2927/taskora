@@ -27,6 +27,26 @@ class FileService {
     return upload(File(f.path!), f.name);
   }
 
+  /// Pick several files (or images) at once and upload them one by one.
+  /// [onProgress] gets (done, total). Files over 30 MB are skipped.
+  static Future<List<Attachment>> pickAndUploadMany({bool imagesOnly = false, void Function(int done, int total)? onProgress}) async {
+    final r = await FilePicker.platform.pickFiles(type: imagesOnly ? FileType.image : FileType.any, allowMultiple: true, withData: kIsWeb);
+    if (r == null || r.files.isEmpty) return [];
+    final out = <Attachment>[];
+    final files = r.files.where((f) => f.size <= maxBytes).toList();
+    onProgress?.call(0, files.length);
+    for (final f in files) {
+      if (kIsWeb) {
+        if (f.bytes != null) out.add(await _send(http.MultipartFile.fromBytes('file', f.bytes!, filename: f.name), f.name));
+      } else if (f.path != null) {
+        out.add(await upload(File(f.path!), f.name));
+      }
+      onProgress?.call(out.length, files.length);
+    }
+    if (files.length < r.files.length && out.isEmpty) throw 'Files can be up to 30 MB each.';
+    return out;
+  }
+
   static Future<Attachment> upload(File file, String name) async => _send(await http.MultipartFile.fromPath('file', file.path, filename: name), name);
 
   static Future<Attachment> _send(http.MultipartFile part, String name) async {

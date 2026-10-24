@@ -73,6 +73,10 @@ class Prefs extends ChangeNotifier {
   int get lastReminderScan => _get('lastReminderScan', 0);
   set lastReminderScan(int v) => _p.setInt('lastReminderScan', v); // no rebuild needed
 
+  /// The tab you last had open in each note (opens there next time).
+  int noteTab(String id) => _get('noteTab_$id', 0);
+  void setNoteTab(String id, int i) => _p.setInt('noteTab_$id', i);
+
   // Views
   String get projectView => _get('projectView', 'grid'); // grid | list | board
   set projectView(String v) => _set('projectView', v);

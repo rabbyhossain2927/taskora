@@ -2,7 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
+import 'package:googleapis_auth/googleapis_auth.dart' as gauth;
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -86,6 +89,8 @@ class BackupService {
   /// Turns Google's long error text into something short and useful.
   static String friendlyDriveError(Object e) {
     final t = e.toString();
+    if (t.contains('popup-closed') || t.contains('cancelled-popup') || t.contains('popup-blocked')) return 'The Google window was closed or blocked. Allow pop-ups for this site and try again.';
+    if (t.contains('credential-already-in-use') || t.contains('user-mismatch')) return 'Please choose the same Google account you use for TaskOra.';
     if (t.contains('has not been used') || t.contains('is disabled') || t.contains('accessNotConfigured')) {
       return 'Google Drive is switched off for this app. The owner needs to enable the Google Drive API in Google Cloud.';
     }
@@ -107,7 +112,37 @@ class BackupService {
       store.importAll(jsonDecode(text) as Map<String, dynamic>);
 
   // ---------------- Google Drive ----------------
+  // On the website Google sign-in goes through a popup, which gives a Drive
+  // access token for about an hour.
+  static String? _webToken;
+  static DateTime? _webExpiry;
+
+  static Future<drive.DriveApi?> _webDrive({required bool interactive}) async {
+    const scope = drive.DriveApi.driveAppdataScope;
+    if (_webToken == null || DateTime.now().isAfter(_webExpiry!)) {
+      if (!interactive) return null;
+      final u = FirebaseAuth.instance.currentUser;
+      if (u == null) return null;
+      final provider = GoogleAuthProvider()..addScope(scope);
+      final hasGoogle = u.providerData.any((p) => p.providerId == 'google.com');
+      final cred = hasGoogle ? await u.reauthenticateWithPopup(provider) : await u.linkWithPopup(provider);
+      final t = cred.credential?.accessToken;
+      if (t == null) return null;
+      _webToken = t;
+      _webExpiry = DateTime.now().add(const Duration(minutes: 55));
+    }
+    final client = gauth.authenticatedClient(
+      http.Client(),
+      gauth.AccessCredentials(gauth.AccessToken('Bearer', _webToken!, _webExpiry!.toUtc()), null, const [scope]),
+    );
+    return drive.DriveApi(client);
+  }
+
+  /// True on the website once Drive was connected in this visit.
+  static bool get webDriveReady => _webToken != null && _webExpiry != null && DateTime.now().isBefore(_webExpiry!);
+
   static Future<drive.DriveApi?> _drive({required bool interactive}) async {
+    if (kIsWeb) return _webDrive(interactive: interactive);
     final g = AuthService.google;
     var acc = g.currentUser ?? await g.signInSilently();
     if (acc == null && interactive) acc = await g.signIn();
