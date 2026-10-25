@@ -128,11 +128,22 @@ DefaultStyles noteStyles(BuildContext context, Color? ink, Color accent, Color m
     h2: block(t(18, w: FontWeight.w700, h: 1.4, ls: -0.2), 10, 2),
     h3: block(t(16, w: FontWeight.w700, h: 1.4), 8, 2),
     paragraph: block(t(15), 0, 0),
+    leading: block(t(15), 0, 0),
     placeHolder: block(t(15).copyWith(color: muted), 0, 0),
     small: TextStyle(fontSize: 12.5, color: ink?.withOpacity(0.7) ?? muted),
     bold: const TextStyle(fontWeight: FontWeight.w700),
     link: TextStyle(color: accent, decoration: TextDecoration.underline),
   ));
+}
+
+/// Bullets in the same colour, font and weight as the text.
+Widget? noteBullet(Node node, LeadingConfigurations config, TextStyle text) {
+  if (config.attribute != Attribute.ul) return null;
+  return QuillEditorBulletPoint(
+    style: text.copyWith(fontSize: config.style?.fontSize ?? text.fontSize, fontWeight: FontWeight.w400),
+    width: config.width ?? 28,
+    padding: config.padding ?? 0,
+  );
 }
 
 /// Shows images inside the note text. Tap opens the full image.

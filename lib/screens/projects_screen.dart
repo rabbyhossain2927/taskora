@@ -359,7 +359,7 @@ class ProjectCard extends StatelessWidget {
 class ProjectTile extends StatelessWidget {
   final Project p;
   const ProjectTile({super.key, required this.p});
-  static const infoHeight = 98.0;
+  static const infoHeight = 138.0;
   @override
   Widget build(BuildContext context) {
     final s = context.watch<Store>();
@@ -367,7 +367,24 @@ class ProjectTile extends StatelessWidget {
     final pr = s.progressOf(p.id);
     final tasks = s.todosOf(p.id);
     final st = s.status(p.status);
+    final cat = s.projectCat(p.category);
     final cover = p.cover;
+    final showMoney = context.watch<Prefs>().showMoney;
+    // Days until the deadline
+    final now = DateTime.now();
+    final days = p.deadline == null ? null : DateTime(p.deadline!.year, p.deadline!.month, p.deadline!.day).difference(DateTime(now.year, now.month, now.day)).inDays;
+    final dueText = days == null
+        ? ''
+        : p.done
+            ? 'done'
+            : days < 0
+                ? '${-days}d late'
+                : days == 0
+                    ? 'today'
+                    : days == 1
+                        ? 'tomorrow'
+                        : '${days}d left';
+    final dueColor = days != null && !p.done && days < 0 ? C.red : (days != null && !p.done && days <= 2 ? const Color(0xFFD48806) : context.mutedText);
     return Material(
       color: context.surface,
       borderRadius: BorderRadius.circular(22),
@@ -418,23 +435,59 @@ class ProjectTile extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(p.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, height: 1.25, decoration: p.done ? TextDecoration.lineThrough : null)),
-                const Spacer(),
-                TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0, end: pr),
-                  duration: const Duration(milliseconds: 700),
-                  curve: Curves.easeOutCubic,
-                  builder: (_, v, __) => ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: v, minHeight: 5, color: c.fg, backgroundColor: c.bg)),
-                ),
-                const SizedBox(height: 6),
+                Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, decoration: p.done ? TextDecoration.lineThrough : null)),
+                const SizedBox(height: 5),
+                // category + priority
                 Row(children: [
-                  Text('${tasks.where((t) => t.done).length}/${tasks.length} tasks', style: TextStyle(fontSize: 11, color: context.mutedText, fontWeight: FontWeight.w600)),
-                  const Spacer(),
-                  if (p.deadline != null) ...[
-                    Icon(Icons.event_outlined, size: 11, color: context.mutedText),
-                    const SizedBox(width: 2),
-                    Flexible(child: Text(fmtDue(p.deadline!), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: context.mutedText, fontWeight: FontWeight.w600))),
+                  Icon(iconOf(cat.icon), size: 12, color: pastel(cat.color).fg),
+                  const SizedBox(width: 4),
+                  Flexible(child: Text(cat.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: pastel(cat.color).fg))),
+                  const SizedBox(width: 8),
+                  Icon(Icons.flag_rounded, size: 12, color: priorityColor(p.priority)),
+                  const SizedBox(width: 2),
+                  Text(priorityName(p.priority), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: context.mutedText)),
+                ]),
+                const Spacer(),
+                // progress
+                Row(children: [
+                  Expanded(
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: pr),
+                      duration: const Duration(milliseconds: 700),
+                      curve: Curves.easeOutCubic,
+                      builder: (_, v, __) => ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: v, minHeight: 5, color: c.fg, backgroundColor: c.bg)),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text('${(pr * 100).round()}%', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: c.fg)),
+                ]),
+                const SizedBox(height: 4),
+                Row(children: [
+                  Icon(Icons.check_circle_outline_rounded, size: 11, color: context.mutedText),
+                  const SizedBox(width: 3),
+                  Text('${tasks.where((t) => t.done).length}/${tasks.length}', style: TextStyle(fontSize: 11, color: context.mutedText, fontWeight: FontWeight.w600)),
+                  if (p.files.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Icon(Icons.attach_file_rounded, size: 11, color: context.mutedText),
+                    Text('${p.files.length}', style: TextStyle(fontSize: 11, color: context.mutedText, fontWeight: FontWeight.w600)),
                   ],
+                  const Spacer(),
+                  if (showMoney && (p.amount ?? 0) > 0)
+                    Flexible(child: Text(fmtMoney(p.net, p.currency), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: C.green))),
+                ]),
+                const SizedBox(height: 4),
+                // deadline with days left
+                Row(children: [
+                  Icon(Icons.event_outlined, size: 11, color: dueColor),
+                  const SizedBox(width: 3),
+                  Expanded(
+                    child: Text(
+                      p.deadline == null ? 'No deadline' : '${fmtDue(p.deadline!)} · $dueText',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11, color: dueColor, fontWeight: FontWeight.w600),
+                    ),
+                  ),
                 ]),
               ]),
             ),

@@ -40,6 +40,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   final _ctrls = <NoteBlock, QuillController>{};
   final _nodes = <NoteBlock, FocusNode>{};
   final _scrolls = <NoteBlock, ScrollController>{};
+  final _keys = <NoteBlock, GlobalKey>{};
   final _subs = <StreamSubscription>[];
   Timer? _debounce;
   String _lastSaved = '';
@@ -683,11 +684,12 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
       case 'doc':
         final c = _ctrlFor(b);
         final firstDoc = cur.blocks.indexWhere((x) => x.type == 'doc') == i;
-        return TapRegion(
+        final key = _keys.putIfAbsent(b, GlobalKey.new);
+        final textStyle = TextStyle(fontSize: 15, height: 1.55, color: ink ?? Theme.of(context).colorScheme.onSurface, fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily);
+        return KeyedSubtree(
           key: ObjectKey(b),
-          groupId: EditableText,
-          onTapOutside: (_) => _nodes[b]?.unfocus(),
           child: QuillEditor(
+            key: key,
             controller: c,
             focusNode: _nodeFor(b),
             scrollController: _scrolls.putIfAbsent(b, ScrollController.new),
@@ -700,6 +702,19 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
               customStyles: noteStyles(context, ink, context.accent, muted),
               embedBuilders: [NoteImageEmbed()],
               textCapitalization: TextCapitalization.sentences,
+              customLeadingBlockBuilder: (node, config) => noteBullet(node, config, textStyle),
+              // Tap outside hides the keyboard, but not while you're selecting
+              // text or dragging the selection handles (which sit near the text).
+              onTapOutside: (event, node) {
+                if (!node.hasFocus) return;
+                if (!c.selection.isCollapsed) return;
+                final box = key.currentContext?.findRenderObject() as RenderBox?;
+                if (box != null && box.hasSize) {
+                  final area = (box.localToGlobal(Offset.zero) & box.size).inflate(48);
+                  if (area.contains(event.position)) return;
+                }
+                node.unfocus();
+              },
             ),
           ),
         );
