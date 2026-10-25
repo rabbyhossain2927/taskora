@@ -129,12 +129,27 @@ DefaultStyles noteStyles(BuildContext context, Color? ink, Color accent, Color m
     h3: block(t(16, w: FontWeight.w700, h: 1.4), 8, 2),
     paragraph: block(t(15), 0, 0),
     leading: block(t(15), 0, 0),
+    // List lines use exactly the normal text style.
+    lists: DefaultListBlockStyle(t(15), HorizontalSpacing.zero, const VerticalSpacing(2, 0), VerticalSpacing.zero, null, null),
     placeHolder: block(t(15).copyWith(color: muted), 0, 0),
     small: TextStyle(fontSize: 12.5, color: ink?.withOpacity(0.7) ?? muted),
     bold: const TextStyle(fontWeight: FontWeight.w700),
     link: TextStyle(color: accent, decoration: TextDecoration.underline),
   ));
 }
+
+/// Colours for text and highlights in notes.
+const noteTextColors = <(String, String)>[
+  ('#E5484D', 'Red'), ('#F08C2E', 'Orange'), ('#D4A106', 'Yellow'), ('#2EAD6B', 'Green'),
+  ('#0E9384', 'Teal'), ('#2F6FEB', 'Blue'), ('#5B5FEF', 'Indigo'), ('#9B3FB5', 'Purple'),
+  ('#DD2590', 'Pink'), ('#8D5B3D', 'Brown'), ('#6E6E7C', 'Grey'), ('#16161D', 'Black'),
+];
+const noteHighlightColors = <(String, String)>[
+  ('#FFF2A8', 'Yellow'), ('#FFD9E6', 'Pink'), ('#D7F2E3', 'Green'), ('#D6EAFF', 'Blue'),
+  ('#E6DEFF', 'Purple'), ('#FFE4CC', 'Orange'), ('#CDF1EC', 'Teal'), ('#E7E5E0', 'Grey'),
+];
+
+Color hexColor(String h) => Color(int.parse('FF${h.replaceFirst('#', '')}', radix: 16));
 
 /// Bullets in the same colour, font and weight as the text.
 Widget? noteBullet(Node node, LeadingConfigurations config, TextStyle text) {

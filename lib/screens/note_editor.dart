@@ -184,6 +184,66 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   String? get _list => _style[Attribute.list.key]?.value as String?;
   bool get _small => _style.containsKey(Attribute.small.key);
   bool get _bold => _style.containsKey(Attribute.bold.key);
+  Color? get _textColor {
+    final v = _style[Attribute.color.key]?.value;
+    return v is String && v.startsWith('#') ? hexColor(v) : null;
+  }
+
+  /// Text colour and highlight for the selected words (or what you type next).
+  Future<void> _colorSheet() async {
+    final b = _targetBlock();
+    final c = _ctrlFor(b);
+    final sel = c.selection;
+    final hasSel = sel.isValid && !sel.isCollapsed;
+    final picked = await showModalBottomSheet<(String, String?)>(
+      context: context,
+      builder: (ctx) {
+        Widget dot(String hex, String name, String kind, {bool highlight = false}) => Tooltip(
+              message: name,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () => Navigator.pop(ctx, (kind, hex)),
+                child: Container(
+                  width: 38,
+                  height: 38,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(color: hexColor(hex), shape: BoxShape.circle, border: Border.all(color: Colors.black12)),
+                  child: highlight ? const Text('A', style: TextStyle(fontWeight: FontWeight.w700, color: C.ink)) : null,
+                ),
+              ),
+            );
+        Widget none(String kind, String label) => ActionChip(
+              avatar: const Icon(Icons.format_color_reset_outlined, size: 18),
+              label: Text(label),
+              onPressed: () => Navigator.pop(ctx, (kind, null)),
+            );
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(hasSel ? 'Colour for the selected text' : 'Colour for what you type next', style: const TextStyle(fontSize: T.heading, fontWeight: FontWeight.w700)),
+              if (!hasSel) Padding(padding: const EdgeInsets.only(top: 4), child: Text('Tip: select some words first to colour them.', style: TextStyle(color: ctx.mutedText, fontSize: 12.5))),
+              const Label('Text colour'),
+              Wrap(spacing: 10, runSpacing: 10, children: [for (final (h, n) in noteTextColors) dot(h, n, 'color')]),
+              const SizedBox(height: 8),
+              none('color', 'Default colour'),
+              const Label('Highlight'),
+              Wrap(spacing: 10, runSpacing: 10, children: [for (final (h, n) in noteHighlightColors) dot(h, n, 'background', highlight: true)]),
+              const SizedBox(height: 8),
+              none('background', 'No highlight'),
+            ]),
+          ),
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+    final (kind, hex) = picked;
+    c.updateSelection(sel, ChangeSource.local);
+    final attr = kind == 'color' ? (hex == null ? Attribute.clone(Attribute.color, null) : ColorAttribute(hex)) : (hex == null ? Attribute.clone(Attribute.background, null) : BackgroundAttribute(hex));
+    c.formatSelection(attr);
+    setState(() => focused = b);
+    _nodes[b]?.requestFocus();
+  }
 
   /// Selected text, or the whole line the cursor is on.
   (int, int) _lineRange(QuillController c) {
@@ -553,6 +613,14 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                       _toggle(Icons.format_bold_rounded, 'Bold', _bold, _toggleBold),
                       _toggle(Icons.format_list_bulleted_rounded, 'Bullet points', _list == 'bullet', () => _toggleList(Attribute.ul)),
                       _toggle(Icons.checklist_rounded, 'Checklist', _list == 'checked' || _list == 'unchecked', () => _toggleList(Attribute.unchecked)),
+                      IconButton(
+                        tooltip: 'Text colour & highlight',
+                        onPressed: _colorSheet,
+                        icon: Column(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.format_color_text_rounded, size: 22),
+                          Container(width: 18, height: 3, decoration: BoxDecoration(color: _textColor ?? context.mutedText, borderRadius: BorderRadius.circular(2))),
+                        ]),
+                      ),
                       const SizedBox(height: 24, child: VerticalDivider()),
                       IconButton(tooltip: 'Images (at the cursor)', icon: const Icon(Icons.image_outlined), onPressed: uploading != null ? null : _addImages),
                       IconButton(tooltip: 'Files or PDFs', icon: const Icon(Icons.attach_file_rounded), onPressed: uploading != null ? null : _addFiles),
@@ -686,8 +754,12 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
         final firstDoc = cur.blocks.indexWhere((x) => x.type == 'doc') == i;
         final key = _keys.putIfAbsent(b, GlobalKey.new);
         final textStyle = TextStyle(fontSize: 15, height: 1.55, color: ink ?? Theme.of(context).colorScheme.onSurface, fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily);
-        return KeyedSubtree(
+        return Builder(
           key: ObjectKey(b),
+          // Builder: styles are read inside the page (not above it), so list
+          // lines get the normal text colour and font.
+          builder: (context) => DefaultTextStyle.merge(
+          style: textStyle,
           child: QuillEditor(
             key: key,
             controller: c,
@@ -716,6 +788,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                 node.unfocus();
               },
             ),
+          ),
           ),
         );
       case 'check':

@@ -105,7 +105,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     final grid = view == 'grid';
     Widget cards(List<Project> list, {bool faded = false}) => grid
         ? LayoutBuilder(builder: (context, c) {
-            final n = (c.maxWidth / 230).floor().clamp(2, 6);
+            // Phones: one big card per row. Computers: several.
+            final n = isDesktop(context) ? (c.maxWidth / 230).floor().clamp(2, 6) : 1;
             final w = (c.maxWidth - 12 * (n - 1)) / n;
             return GridView.builder(
               shrinkWrap: true,
