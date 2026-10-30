@@ -66,17 +66,14 @@ class DeskSeg<T> extends StatelessWidget {
         decoration: BoxDecoration(color: context.surface, borderRadius: BorderRadius.circular(12), boxShadow: const [BoxShadow(color: Color(0x0F281E6E), blurRadius: 2, offset: Offset(0, 1))]),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           for (final it in items)
-            DeskHover(
+            _SmoothItem(
               onTap: () => onChanged(it.$1),
               radius: 9,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                height: 34,
-                alignment: Alignment.center,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(color: it.$1 == value ? (context.isDark ? Colors.white12 : context.selTint) : Colors.transparent, borderRadius: BorderRadius.circular(9)),
-                child: Text(it.$2, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: it.$1 == value ? context.selInk : context.mutedText)),
-              ),
+              selected: it.$1 == value,
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Text(it.$2),
+              textStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: it.$1 == value ? context.selInk : context.mutedText),
             ),
         ]),
       );
@@ -133,18 +130,68 @@ class DeskFilter extends StatelessWidget {
   final VoidCallback onTap;
   const DeskFilter(this.label, {super.key, required this.on, required this.onTap});
   @override
-  Widget build(BuildContext context) => DeskHover(
-        onTap: onTap,
-        radius: 99,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: on ? context.accent : context.surface,
+  Widget build(BuildContext context) => AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        decoration: BoxDecoration(
+          color: on ? context.accent : context.surface,
+          borderRadius: BorderRadius.circular(99),
+          boxShadow: on ? [BoxShadow(color: context.accent.withOpacity(0.25), blurRadius: 10, offset: const Offset(0, 3))] : const [BoxShadow(color: Color(0x0F281E6E), blurRadius: 2, offset: Offset(0, 1))],
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
             borderRadius: BorderRadius.circular(99),
-            boxShadow: on ? [BoxShadow(color: context.accent.withOpacity(0.25), blurRadius: 10, offset: const Offset(0, 3))] : const [BoxShadow(color: Color(0x0F281E6E), blurRadius: 2, offset: Offset(0, 1))],
+            hoverColor: on ? Colors.white.withOpacity(0.08) : context.hoverTint,
+            splashColor: context.selTint,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              child: AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 180),
+                style: TextStyle(fontFamily: DefaultTextStyle.of(context).style.fontFamily, fontSize: 13, fontWeight: FontWeight.w600, color: on ? Colors.white : (context.isDark ? Colors.white70 : const Color(0xFF4B4B5A))),
+                child: Text(label),
+              ),
+            ),
           ),
-          child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: on ? Colors.white : (context.isDark ? Colors.white70 : const Color(0xFF4B4B5A)))),
+        ),
+      );
+}
+
+/// The one smooth hover / select used everywhere (same feel as the settings menu):
+/// background fades in, ink hover in the theme colour, text colour animates.
+class _SmoothItem extends StatelessWidget {
+  final VoidCallback? onTap;
+  final double radius;
+  final bool selected;
+  final double? height;
+  final EdgeInsets padding;
+  final Widget child;
+  final TextStyle textStyle;
+  const _SmoothItem({required this.onTap, required this.radius, required this.selected, this.height, required this.padding, required this.child, required this.textStyle});
+  @override
+  Widget build(BuildContext context) => AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        decoration: BoxDecoration(color: selected ? context.selTint : context.selTint.withOpacity(0), borderRadius: BorderRadius.circular(radius)),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(radius),
+            hoverColor: context.hoverTint,
+            splashColor: context.selTint,
+            child: Container(
+              height: height,
+              alignment: height == null ? null : Alignment.center,
+              padding: padding,
+              child: AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 180),
+                style: textStyle.copyWith(fontFamily: DefaultTextStyle.of(context).style.fontFamily),
+                child: child,
+              ),
+            ),
+          ),
         ),
       );
 }
@@ -165,7 +212,19 @@ class DeskHover extends StatefulWidget {
 class _DeskHoverState extends State<DeskHover> {
   bool h = false;
   @override
-  Widget build(BuildContext context) => MouseRegion(
+  Widget build(BuildContext context) => widget.wash
+      ? Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: widget.onTap,
+            onSecondaryTap: widget.onSecondaryTap,
+            borderRadius: BorderRadius.circular(widget.radius),
+            hoverColor: context.hoverTint,
+            splashColor: context.selTint,
+            child: Padding(padding: widget.padding, child: widget.child),
+          ),
+        )
+      : MouseRegion(
         cursor: widget.onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
         onEnter: (_) => setState(() => h = true),
         onExit: (_) => setState(() => h = false),

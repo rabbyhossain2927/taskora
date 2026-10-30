@@ -238,7 +238,9 @@ class _NotesScreenState extends State<NotesScreen> {
           folder = key;
           openId = null;
         }),
-        child: Container(
+        hoverColor: context.hoverTint,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
           height: 38,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(color: on ? (context.isDark ? Colors.white10 : context.selTint) : null, borderRadius: BorderRadius.circular(11)),

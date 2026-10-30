@@ -589,16 +589,19 @@ class _ItemState extends State<_Item> {
     final d = widget.data;
     final sel = widget.selected;
     final dark = context.isDark;
+    final tileBg = sel ? d.$5 : (dark ? d.$5.withOpacity(0.18) : d.$4);
+    final iconC = sel ? Colors.white : (dark ? Color.lerp(d.$5, Colors.white, 0.4)! : d.$5);
     final tile = AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
       width: 30,
       height: 30,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        color: sel ? null : (dark ? d.$5.withOpacity(0.18) : d.$4),
-        gradient: sel ? LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [d.$5, d.$5.withOpacity(0.8)]) : null,
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), color: tileBg),
+      child: TweenAnimationBuilder<Color?>(
+        tween: ColorTween(end: iconC),
+        duration: const Duration(milliseconds: 180),
+        builder: (_, c, __) => Icon(d.$3, size: 17, color: c),
       ),
-      child: Icon(d.$3, size: 17, color: sel ? Colors.white : (dark ? Color.lerp(d.$5, Colors.white, 0.4) : d.$5)),
     );
     final badge = widget.badge.isEmpty
         ? null
@@ -609,36 +612,38 @@ class _ItemState extends State<_Item> {
                 child: Text(widget.badge, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFFB42318))),
               )
             : Text(widget.badge, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: context.selInk));
-    final item = MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => hover = true),
-      onExit: (_) => setState(() => hover = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOut,
-          height: 42,
-          margin: EdgeInsets.symmetric(horizontal: widget.full ? 12 : 14, vertical: 2),
-          padding: EdgeInsets.symmetric(horizontal: widget.full ? 8 : 0),
-          decoration: BoxDecoration(
+    final item = Padding(
+      padding: EdgeInsets.symmetric(horizontal: widget.full ? 12 : 14, vertical: 2),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), color: sel ? context.selTint : context.selTint.withOpacity(0)),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: widget.onTap,
             borderRadius: BorderRadius.circular(14),
-            color: sel ? context.selTint : (hover ? context.hoverTint : Colors.transparent),
-            
+            hoverColor: context.hoverTint,
+            splashColor: context.selTint,
+            child: Container(
+              height: 42,
+              padding: EdgeInsets.symmetric(horizontal: widget.full ? 8 : 0),
+              child: Row(mainAxisAlignment: widget.full ? MainAxisAlignment.start : MainAxisAlignment.center, children: [
+                widget.full || badge == null ? tile : Badge(label: Text(widget.badge), backgroundColor: C.red, child: tile),
+                if (widget.full) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 180),
+                      style: TextStyle(fontFamily: DefaultTextStyle.of(context).style.fontFamily, fontWeight: sel ? FontWeight.w700 : FontWeight.w500, fontSize: 14, color: sel ? context.selInk : (dark ? Colors.white70 : const Color(0xFF4B4B5A))),
+                      child: Text(d.$2, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                  if (badge != null) badge,
+                ],
+              ]),
+            ),
           ),
-          child: Row(mainAxisAlignment: widget.full ? MainAxisAlignment.start : MainAxisAlignment.center, children: [
-            widget.full || badge == null ? tile : Badge(label: Text(widget.badge), backgroundColor: C.red, child: tile),
-            if (widget.full) ...[
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(d.$2,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontWeight: sel ? FontWeight.w700 : FontWeight.w500, fontSize: 14, color: sel ? context.selInk : (dark ? null : const Color(0xFF4B4B5A)))),
-              ),
-              if (badge != null) badge,
-            ],
-          ]),
         ),
       ),
     );

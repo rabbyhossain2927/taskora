@@ -265,6 +265,7 @@ class _DesktopAccountState extends State<_DesktopAccount> {
                 child: InkWell(
                   borderRadius: BorderRadius.circular(11),
                   onTap: () => setState(() => page = p.$1),
+                  hoverColor: context.hoverTint,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 160),
                     height: 38,
