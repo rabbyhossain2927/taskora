@@ -123,7 +123,7 @@ class ShellState extends State<Shell> with WidgetsBindingObserver, SingleTickerP
             return Opacity(opacity: 0.35 + 0.65 * v, child: Transform.translate(offset: Offset(0, (1 - v) * 14), child: child));
           },
           child: IndexedStack(index: t, children: [
-            for (final (w, max) in const [(HomeScreen(), 1240.0), (ProjectsScreen(), 1320.0), (TodosScreen(), 920.0), (NotesScreen(), 1320.0)])
+            for (final (w, max) in const [(HomeScreen(), 1480.0), (ProjectsScreen(), 1480.0), (TodosScreen(), 1000.0), (NotesScreen(), 1480.0)])
               // Computers: keep each page at a comfortable width, centred.
               _wide ? Align(alignment: Alignment.topCenter, child: ConstrainedBox(constraints: BoxConstraints(maxWidth: max), child: w)) : w,
           ]),

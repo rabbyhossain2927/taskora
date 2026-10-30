@@ -203,6 +203,9 @@ class HomeScreen extends StatelessWidget {
         child: LayoutBuilder(builder: (context, c) {
           // Wide screens: two columns side by side.
           final wide = c.maxWidth >= 980;
+          if (wide && isDesktop(context)) {
+            return _DesktopHome(g: g, first: first, s: s, prefs: prefs, dueToday: dueToday, upcoming: upcoming, active: active, homeSections: homeSections, total: total, doneToday: doneToday);
+          }
           return ListView(
             padding: EdgeInsets.fromLTRB(wide ? 28 : 20, isDesktop(context) ? 22 : 10, wide ? 28 : 20, isDesktop(context) ? 40 : 120),
             children: wide
@@ -519,6 +522,175 @@ class _HomeNote extends StatelessWidget {
             ),
           ]),
         ),
+      ),
+    );
+  }
+}
+
+/// Computers: a compact dashboard that fills the width (no big empty areas).
+class _DesktopHome extends StatelessWidget {
+  final (String, IconData, Color) g;
+  final String first;
+  final Store s;
+  final Prefs prefs;
+  final List<Todo> dueToday, upcoming;
+  final List<Project> active;
+  final List<NoteSection> homeSections;
+  final int total, doneToday;
+  const _DesktopHome({required this.g, required this.first, required this.s, required this.prefs, required this.dueToday, required this.upcoming, required this.active, required this.homeSections, required this.total, required this.doneToday});
+
+  void _open(BuildContext context, Widget page) => Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+
+  @override
+  Widget build(BuildContext context) {
+    var i = 0;
+    Widget section(String title, Widget child, {VoidCallback? onAll}) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+            child: Row(children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5)),
+              const Spacer(),
+              if (onAll != null) _SeeAll(onTap: onAll),
+            ]),
+          ),
+          child,
+        ]);
+    Widget todoBox(List<Todo> list, String empty) => Box(
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+          child: list.isEmpty
+              ? Padding(padding: const EdgeInsets.all(12), child: Text(empty, style: TextStyle(color: context.mutedText)))
+              : Column(children: [for (final t in list.take(8)) TodoRow(todo: t)]),
+        );
+    return ListView(padding: const EdgeInsets.fromLTRB(28, 22, 28, 40), children: [
+      // greeting + search on one line
+      FadeIn(
+        index: i++,
+        child: Row(children: [
+          Breathing(
+            child: Container(width: 42, height: 42, decoration: BoxDecoration(color: g.$3.withOpacity(0.15), shape: BoxShape.circle), child: Icon(g.$2, color: g.$3, size: 23)),
+          ),
+          const SizedBox(width: 12),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(g.$1, style: TextStyle(color: context.mutedText, fontSize: T.small)),
+            Text(first.isEmpty ? 'Welcome' : first, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          ]),
+          const SizedBox(width: 24),
+          Expanded(
+            child: Material(
+              color: context.surface,
+              borderRadius: BorderRadius.circular(14),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => _open(context, const SearchScreen()),
+                child: Container(
+                  height: 44,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: context.isDark ? Colors.white10 : C.line)),
+                  child: Row(children: [
+                    Icon(Icons.search_rounded, color: context.mutedText, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text('Search projects, to-dos, notes…', style: TextStyle(color: context.mutedText))),
+                    Text('Ctrl+K', style: TextStyle(color: context.mutedText, fontSize: 11.5)),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+        ]),
+      ),
+      const SizedBox(height: 18),
+      // today · stats · focus in one row
+      FadeIn(
+        index: i++,
+        child: IntrinsicHeight(
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Expanded(flex: 2, child: _TodayCard(total: total, done: doneToday, due: dueToday.length, active: active.length, notes: s.notes.length)),
+            const SizedBox(width: 14),
+            Expanded(child: _StatsTile(store: s, onTap: () => _open(context, const StatsScreen()))),
+            const SizedBox(width: 14),
+            Expanded(child: _FocusTile(minutes: prefs.focusMinutes, onTap: () => _open(context, const FocusScreen()))),
+          ]),
+        ),
+      ),
+      const SizedBox(height: 22),
+      // to-dos left, projects right
+      FadeIn(
+        index: i++,
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            flex: 3,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              section('Due today${dueToday.isEmpty ? '' : ' · ${dueToday.length}'}', todoBox(dueToday, 'Nothing due. Enjoy the calm!'), onAll: () => ShellState.of(context)?.go(2)),
+              const SizedBox(height: 18),
+              section('Next 7 days${upcoming.isEmpty ? '' : ' · ${upcoming.length}'}', todoBox(upcoming, 'Nothing planned this week.'), onAll: () => _open(context, const CalendarScreen())),
+            ]),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            flex: 2,
+            child: section(
+              'Active projects · ${active.length}',
+              Box(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: active.isEmpty
+                    ? Padding(padding: const EdgeInsets.all(18), child: Text('No active projects.', style: TextStyle(color: context.mutedText)))
+                    : Column(children: [
+                        for (var k = 0; k < active.length && k < 7; k++) ...[
+                          if (k > 0) const Divider(indent: 16, endIndent: 16),
+                          _ProjectRow(p: active[k]),
+                        ],
+                      ]),
+              ),
+              onAll: () => ShellState.of(context)?.go(1),
+            ),
+          ),
+        ]),
+      ),
+      // note folders side by side
+      if (prefs.showNotesOnHome && homeSections.isNotEmpty) ...[
+        const SizedBox(height: 22),
+        FadeIn(
+          index: i++,
+          child: LayoutBuilder(builder: (context, c) {
+            final per = (c.maxWidth / 420).floor().clamp(1, homeSections.length);
+            final w = (c.maxWidth - 20 * (per - 1)) / per;
+            return Wrap(spacing: 20, runSpacing: 4, children: [for (final sec in homeSections) SizedBox(width: w, child: _HomeSection(sec: sec))]);
+          }),
+        ),
+      ],
+    ]);
+  }
+}
+
+/// One project as a compact row (computers' Home).
+class _ProjectRow extends StatelessWidget {
+  final Project p;
+  const _ProjectRow({required this.p});
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<Store>();
+    final pr = s.progressOf(p.id);
+    final c = pastel(p.color);
+    return InkWell(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProjectDetail(id: p.id))),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(children: [
+          Container(width: 34, height: 34, decoration: BoxDecoration(color: c.bg, borderRadius: BorderRadius.circular(11)), child: Icon(iconOf(p.icon), color: c.fg, size: 18)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
+              const SizedBox(height: 6),
+              ClipRRect(borderRadius: BorderRadius.circular(3), child: LinearProgressIndicator(value: pr, minHeight: 4, color: c.fg, backgroundColor: c.bg)),
+            ]),
+          ),
+          const SizedBox(width: 12),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text('${(pr * 100).round()}%', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5, color: c.fg)),
+            if (p.deadline != null) Text(fmtDue(p.deadline!), style: TextStyle(fontSize: 11, color: context.mutedText)),
+          ]),
+        ]),
       ),
     );
   }
