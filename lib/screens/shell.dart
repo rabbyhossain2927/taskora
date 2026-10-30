@@ -103,9 +103,9 @@ class ShellState extends State<Shell> with WidgetsBindingObserver, SingleTickerP
   NavigatorState get _nav => (_wide ? contentNav.currentState : null) ?? Navigator.of(context);
 
   /// Opens a page: inside the content area on computers, full screen on phones.
-  void open(Widget page, {bool modal = false}) {
+  void open(Widget page, {bool modal = false, bool wide = false}) {
     setState(() => menuOpen = false);
-    _nav.push(MaterialPageRoute(builder: (_) => page, fullscreenDialog: modal));
+    _nav.push(MaterialPageRoute(builder: (_) => page, fullscreenDialog: modal, settings: RouteSettings(name: wide ? 'wide' : null)));
   }
 
   void _add(Widget page) => open(page, modal: true);
@@ -124,7 +124,7 @@ class ShellState extends State<Shell> with WidgetsBindingObserver, SingleTickerP
   void openSide(String key, Widget page) {
     contentNav.currentState?.popUntil((r) => r.isFirst);
     side.value = key;
-    open(page);
+    open(page, wide: true);
   }
 
   Widget _tabs() => ValueListenableBuilder<int>(

@@ -258,7 +258,7 @@ class BackgroundPageTransitionsBuilder extends PageTransitionsBuilder {
         child: SlideTransition(
           position: Tween(begin: Offset.zero, end: const Offset(-0.05, 0)).animate(outA),
           // Pages opened on top get a readable width on big screens.
-          child: AppBackground(t: t, dark: dark, style: style, constrain: !route.isFirst, child: child),
+          child: AppBackground(t: t, dark: dark, style: style, constrain: !route.isFirst && route.settings.name != 'wide', child: child),
         ),
       ),
     );

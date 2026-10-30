@@ -604,7 +604,7 @@ class _DesktopHome extends StatelessWidget {
                 height: 40,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  child: Row(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.center, children: [
                     if (ic != null) ...[Icon(ic, size: 18, color: main ? Colors.white : const Color(0xFF3B2E8F)), const SizedBox(width: 6)],
                     Text(t, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: main ? Colors.white : const Color(0xFF3B2E8F))),
                   ]),
@@ -629,13 +629,13 @@ class _DesktopHome extends StatelessWidget {
               Text(left, style: const TextStyle(fontSize: 44, fontWeight: FontWeight.w800, letterSpacing: -1.5, height: 1, color: Color(0xFF2A2170), fontFeatures: [FontFeature.tabularFigures()])),
             ]),
           ),
-          Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          SizedBox(width: 120, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
             if (f.running) btn('Pause', Icons.pause_rounded, true, f.pause)
             else if (f.paused) btn('Resume', Icons.play_arrow_rounded, true, f.resume)
             else btn('Start', Icons.play_arrow_rounded, true, () => _side(context, 'focus', const FocusScreen())),
             const SizedBox(height: 8),
             f.active ? btn('Stop', null, false, f.stop) : btn('Options', null, false, () => _side(context, 'focus', const FocusScreen())),
-          ]),
+          ]),)
         ]),
       );
     });
@@ -751,7 +751,7 @@ class _DesktopHome extends StatelessWidget {
       FadeIn(
         index: 1,
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(flex: 7, child: todayCard),
+          Expanded(flex: 7, child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 384), child: todayCard)),
           const SizedBox(width: 18),
           Expanded(flex: 5, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [focusCard, const SizedBox(height: 18), weekCard])),
         ]),
