@@ -55,7 +55,8 @@ class AuthState extends ChangeNotifier {
       notifyListeners();
     });
     // Show the splash for a moment so it doesn't flash.
-    Future.delayed(const Duration(milliseconds: 1500), () {
+    // Web already shows a loading screen from index.html, so no second splash there.
+    Future.delayed(Duration(milliseconds: kIsWeb ? 0 : 1500), () {
       _splashDone = true;
       notifyListeners();
     });

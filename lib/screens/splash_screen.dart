@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../widgets/common.dart';
 import 'auth_screens.dart';
@@ -8,6 +9,24 @@ class SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final a = context.accent;
+    // Web: same light screen as index.html while sign-in loads, so it looks like one splash.
+    if (kIsWeb) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF8F7FF),
+        body: Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Logo(size: 92),
+            SizedBox(height: 20),
+            Text.rich(TextSpan(children: [TextSpan(text: 'Task'), TextSpan(text: 'Ora', style: TextStyle(color: Color(0xFF7054FB)))]),
+                style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700, letterSpacing: -0.6, color: Color(0xFF16161D))),
+            SizedBox(height: 4),
+            Text('Projects · To-dos · Notes', style: TextStyle(fontSize: 13.5, color: Color(0xFF6A6A7A))),
+            SizedBox(height: 28),
+            SizedBox(width: 120, child: LinearProgressIndicator(minHeight: 4, color: Color(0xFF7054FB), backgroundColor: Color(0xFFE6E1FF))),
+          ]),
+        ),
+      );
+    }
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
