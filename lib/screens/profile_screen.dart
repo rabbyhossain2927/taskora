@@ -10,6 +10,7 @@ import '../services/store.dart';
 import '../services/update_service.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/desk.dart';
 import 'about_screens.dart';
 import 'backup_screen.dart';
 import 'badges_screen.dart';
@@ -599,10 +600,10 @@ class _DesktopAccountState extends State<_DesktopAccount> {
           child: Container(
             clipBehavior: Clip.antiAlias,
             decoration: softCard(18, context.surface),
-            child: NoBack(
+            child: DeskPane(
               child: Navigator(
                 key: ValueKey(page),
-                onGenerateRoute: (_) => PageRouteBuilder(pageBuilder: (_, __, ___) => sel.$3!, transitionDuration: Duration.zero),
+                onGenerateRoute: (_) => PageRouteBuilder(pageBuilder: (_, __, ___) => NoBack(child: sel.$3!), transitionDuration: Duration.zero),
               ),
             ),
           ),

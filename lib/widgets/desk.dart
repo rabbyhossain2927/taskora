@@ -304,9 +304,9 @@ Future<void> openEditor(BuildContext context, Widget editor) {
             child: Stack(children: [
               // Its own navigator, so "Save" (which goes back) closes just the popup.
               Positioned.fill(
-                child: NoBack(
+                child: DeskPane(
                   child: Navigator(
-                    onGenerateRoute: (_) => PageRouteBuilder(pageBuilder: (_, __, ___) => editor, transitionDuration: Duration.zero),
+                    onGenerateRoute: (_) => PageRouteBuilder(pageBuilder: (_, __, ___) => NoBack(child: editor), transitionDuration: Duration.zero),
                     observers: [_CloseOnEmpty(d)],
                   ),
                 ),
@@ -339,4 +339,34 @@ class _CloseOnEmpty extends NavigatorObserver {
   void didPop(Route route, Route? previousRoute) {
     if (previousRoute == null) WidgetsBinding.instance.addPostFrameCallback((_) => Navigator.of(dialog).pop());
   }
+}
+
+
+/// Pages opened inside a panel or popup: plain fade, the panel's own colour
+/// (no page background painted behind them).
+class DeskPane extends StatelessWidget {
+  final Widget child;
+  const DeskPane({super.key, required this.child});
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Theme(
+      data: t.copyWith(pageTransitionsTheme: const PageTransitionsTheme(builders: {
+        TargetPlatform.android: _PaneTransition(),
+        TargetPlatform.iOS: _PaneTransition(),
+        TargetPlatform.windows: _PaneTransition(),
+        TargetPlatform.macOS: _PaneTransition(),
+        TargetPlatform.linux: _PaneTransition(),
+        TargetPlatform.fuchsia: _PaneTransition(),
+      })),
+      child: child,
+    );
+  }
+}
+
+class _PaneTransition extends PageTransitionsBuilder {
+  const _PaneTransition();
+  @override
+  Widget buildTransitions<T>(PageRoute<T> route, BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) =>
+      FadeTransition(opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut), child: ColoredBox(color: Theme.of(context).colorScheme.surface, child: child));
 }

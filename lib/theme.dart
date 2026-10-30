@@ -235,6 +235,8 @@ ThemeData buildTheme(AppThemeOption t, Brightness b, {String bgStyle = 'glow'}) 
     popupMenuTheme: PopupMenuThemeData(color: surface, surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
     chipTheme: base.chipTheme.copyWith(shape: const StadiumBorder(), side: BorderSide(color: dark ? Colors.white12 : C.line)),
     dividerTheme: DividerThemeData(color: dark ? Colors.white10 : const Color(0xFFF0F0F5), space: 1, thickness: 1),
+    iconButtonTheme: IconButtonThemeData(style: ButtonStyle(overlayColor: WidgetStatePropertyAll(t.accent.withOpacity(0.08)))),
+    listTileTheme: ListTileThemeData(selectedTileColor: t.accent.withOpacity(0.12), selectedColor: t.accent),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? Colors.white : null),
       trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? t.accent : null),
@@ -280,7 +282,8 @@ class AppBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final base = dark ? const Color(0xFF0C0C10) : C.bg;
-    final wide = constrain && MediaQuery.sizeOf(context).width >= 1000;
+    // Phones/tablets only: computers always use the full page width.
+    final wide = false && constrain;
     // Computers, dark: plain deep background, nothing painted on top.
     if (dark && MediaQuery.sizeOf(context).width >= 700) {
       return ColoredBox(color: base, child: wide ? Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 980), child: child)) : child);
