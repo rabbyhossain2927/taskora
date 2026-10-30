@@ -10,12 +10,14 @@ import '../services/prefs.dart';
 import '../services/store.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/desk.dart';
 import 'calendar_screen.dart';
 import 'focus_screen.dart';
 import 'note_editor.dart';
 import 'notes_screen.dart';
 import 'notifications_screen.dart';
 import 'project_detail.dart';
+import 'projects_screen.dart' show ProjectCheck;
 import 'project_editor.dart';
 import 'search_screen.dart';
 import 'shell.dart';
@@ -981,9 +983,10 @@ class _ProjectRow extends StatelessWidget {
     final late = p.deadline != null && p.deadline!.isBefore(DateTime(now.year, now.month, now.day));
     final lateDays = late ? DateTime(now.year, now.month, now.day).difference(DateTime(p.deadline!.year, p.deadline!.month, p.deadline!.day)).inDays : 0;
     return _HoverRow(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProjectDetail(id: p.id))),
+      onTap: () => openEditor(context, ProjectEditor(id: p.id)),
       child: cells([
         Row(children: [
+          Transform.scale(scale: 0.8, child: ProjectCheck(p)),
           Container(width: 34, height: 34, decoration: BoxDecoration(color: c.bg, borderRadius: BorderRadius.circular(10)), child: Icon(iconOf(p.icon), color: c.fg, size: 18)),
           const SizedBox(width: 10),
           Expanded(child: Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14))),

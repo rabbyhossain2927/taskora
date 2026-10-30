@@ -598,6 +598,23 @@ class _DashedBorder extends CustomPainter {
 
 // ======================= computers =======================
 
+/// Round tick to complete (or reopen) a project.
+class ProjectCheck extends StatelessWidget {
+  final Project p;
+  final double size;
+  final bool onImage;
+  const ProjectCheck(this.p, {super.key, this.size = 20, this.onImage = false});
+  @override
+  Widget build(BuildContext context) {
+    final dot = Tooltip(
+      message: p.done ? 'Mark as not done' : 'Mark as complete',
+      child: CheckDot(value: p.done, size: size, color: p.done ? const Color(0xFF23845A) : context.accent, onTap: () => setProjectDone(context, p, !p.done)),
+    );
+    if (!onImage) return dot;
+    return Container(decoration: BoxDecoration(color: Colors.white.withOpacity(0.92), shape: BoxShape.circle), child: dot);
+  }
+}
+
 /// Square cover: the project's image, or a soft gradient with its icon.
 class _DeskCover extends StatelessWidget {
   final Project p;
@@ -666,6 +683,7 @@ class _DeskProjectCard extends StatelessWidget {
               child: Stack(fit: StackFit.expand, children: [
                 _DeskCover(p),
                 Positioned(top: 10, right: 10, child: deskChip(st.label, Colors.white.withOpacity(0.92), pastel(st.color).fg)),
+                Positioned(top: 4, left: 4, child: Transform.scale(scale: 0.85, child: ProjectCheck(p, onImage: true))),
               ]),
             ),
             Expanded(
@@ -712,10 +730,12 @@ class _DeskProjectRow extends StatelessWidget {
       onTap: () => openEditor(context, ProjectEditor(id: p.id)),
       onSecondaryTap: () => showProjectActions(context, p),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.fromLTRB(4, 12, 12, 12),
         decoration: BoxDecoration(border: last ? null : Border(bottom: BorderSide(color: context.isDark ? Colors.white.withOpacity(0.05) : deskLine))),
         child: Row(children: [
-          SizedBox(width: 96, height: 96, child: _DeskCover(p, radius: 14, iconSize: 32)),
+          ProjectCheck(p),
+          const SizedBox(width: 6),
+          SizedBox(width: 132, height: 132, child: _DeskCover(p, radius: 16, iconSize: 40)),
           const SizedBox(width: 14),
           Expanded(
             flex: 4,
@@ -837,25 +857,47 @@ class _BoardCard extends StatelessWidget {
     final s = context.read<Store>();
     final c = pastel(p.color);
     final pr = s.progressOf(p.id);
+    final tasks = s.todosOf(p.id);
     final muted = context.mutedText;
     return GestureDetector(
       onTap: () => openEditor(context, ProjectEditor(id: p.id)),
       onSecondaryTap: () => showProjectActions(context, p),
       child: Container(
-        padding: const EdgeInsets.all(10),
+        clipBehavior: Clip.antiAlias,
         decoration: softCard(14, context.surface).copyWith(
           boxShadow: lifted ? [BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 24, offset: const Offset(0, 10))] : null,
         ),
-        child: Row(children: [
-          SizedBox(width: 52, height: 52, child: _DeskCover(p, radius: 10, iconSize: 20)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-              const SizedBox(height: 6),
-              Row(children: [Expanded(child: deskBar(pr, c.fg, h: 5)), const SizedBox(width: 6), Text('${(pr * 100).round()}%', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.fg))]),
-              const SizedBox(height: 4),
-              Text(_dueText(p), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, color: p.deadline == null ? muted : _dueColor(context, p))),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          // Trello-style cover: full width on top (picture, or the project colour).
+          if (p.cover != null)
+            AspectRatio(aspectRatio: 16 / 9, child: _DeskCover(p))
+          else
+            Container(height: 8, color: c.fg.withOpacity(0.55)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 4, 12, 12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [
+                ProjectCheck(p, size: 18),
+                Expanded(child: Text(p.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, decoration: p.done ? TextDecoration.lineThrough : null))),
+              ]),
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Row(children: [Expanded(child: deskBar(pr, c.fg, h: 5)), const SizedBox(width: 6), Text('${(pr * 100).round()}%', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.fg))]),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    Icon(Icons.check_box_outlined, size: 14, color: muted),
+                    const SizedBox(width: 3),
+                    Text('${tasks.where((t) => t.done).length}/${tasks.length}', style: TextStyle(fontSize: 11.5, color: muted)),
+                    const Spacer(),
+                    if (p.deadline != null) ...[
+                      Icon(Icons.schedule_rounded, size: 14, color: _dueColor(context, p)),
+                      const SizedBox(width: 3),
+                      Text(fmtDue(p.deadline!), style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: _dueColor(context, p))),
+                    ],
+                  ]),
+                ]),
+              ),
             ]),
           ),
         ]),
