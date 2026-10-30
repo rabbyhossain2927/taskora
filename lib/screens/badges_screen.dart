@@ -137,7 +137,7 @@ class _BadgesScreenState extends State<BadgesScreen> with SingleTickerProviderSt
                   const SizedBox(height: 10),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: LinearProgressIndicator(value: r(xp - thisLevel, nextLevel - thisLevel), minHeight: 14, color: const Color(0xFFFF9F43), backgroundColor: const Color(0xFFFFEBD3)),
+                    child: LinearProgressIndicator(value: ((xp - thisLevel) / (nextLevel - thisLevel)).clamp(0, 1).toDouble(), minHeight: 14, color: const Color(0xFFFF9F43), backgroundColor: const Color(0xFFFFEBD3)),
                   ),
                   const SizedBox(height: 8),
                   Text('+10 per to-do · +25 per project · +50 when a project is done', style: TextStyle(fontSize: 12, color: context.mutedText)),
