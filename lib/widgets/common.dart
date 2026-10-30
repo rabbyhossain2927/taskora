@@ -22,15 +22,21 @@ extension Ctx on BuildContext {
 bool isDesktop(BuildContext context) => MediaQuery.sizeOf(context).width >= 700;
 
 /// Card look from the web design: white, soft violet shadow, white edge.
-BoxDecoration softCard([double radius = 18, Color color = Colors.white]) => BoxDecoration(
-      color: color,
-      borderRadius: BorderRadius.circular(radius),
-      border: Border.all(color: Colors.white.withOpacity(0.8)),
-      boxShadow: const [
-        BoxShadow(color: Color(0x0D5A46C8), blurRadius: 2, offset: Offset(0, 1)),
-        BoxShadow(color: Color(0x177859DC), blurRadius: 30, offset: Offset(0, 10)),
-      ],
-    );
+/// On dark colours: no edge, no shadow (clean and flat).
+BoxDecoration softCard([double radius = 18, Color color = Colors.white]) {
+  final light = color.computeLuminance() > 0.5;
+  return BoxDecoration(
+    color: color,
+    borderRadius: BorderRadius.circular(radius),
+    border: light ? Border.all(color: Colors.white.withOpacity(0.8)) : null,
+    boxShadow: light
+        ? const [
+            BoxShadow(color: Color(0x0D5A46C8), blurRadius: 2, offset: Offset(0, 1)),
+            BoxShadow(color: Color(0x177859DC), blurRadius: 30, offset: Offset(0, 10)),
+          ]
+        : null,
+  );
+}
 
 final dShort = DateFormat('d MMM');
 final dLong = DateFormat('EEE, d MMM y');
@@ -132,9 +138,10 @@ class Header extends StatelessWidget {
   const Header(this.title, {super.key, this.actions = const [], this.back = true});
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
+        // Inside a popup, leave room for its close (×) button.
+        padding: EdgeInsets.fromLTRB(20, 8, context.dependOnInheritedWidgetOfExactType<NoBack>() == null ? 20 : 60, 10),
         child: Row(children: [
-          if (back) ...[
+          if (back && context.dependOnInheritedWidgetOfExactType<NoBack>() == null) ...[
             RoundButton(icon: Icons.arrow_back_ios_new_rounded, tooltip: 'Back', onTap: () => Navigator.maybePop(context)),
             const SizedBox(width: 12),
           ],
@@ -142,6 +149,13 @@ class Header extends StatelessWidget {
           ...actions.expand((a) => [const SizedBox(width: 8), a]),
         ]),
       );
+}
+
+/// Pages shown inside a panel (e.g. the settings pane on computers) hide their back button.
+class NoBack extends InheritedWidget {
+  const NoBack({super.key, required super.child});
+  @override
+  bool updateShouldNotify(NoBack oldWidget) => false;
 }
 
 /// White rounded card.

@@ -499,8 +499,8 @@ class _Sidebar extends StatelessWidget {
       curve: Curves.easeOutCubic,
       width: w,
       decoration: BoxDecoration(
-        color: dark ? const Color(0xFF1B1B23) : Colors.white.withOpacity(0.72),
-        border: Border(right: BorderSide(color: dark ? Colors.white10 : Colors.white.withOpacity(0.9))),
+        color: dark ? const Color(0xFF111116) : Colors.white.withOpacity(0.72),
+        border: Border(right: BorderSide(color: dark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.9))),
         boxShadow: dark ? null : const [BoxShadow(color: Color(0x0F7859DC), blurRadius: 30, offset: Offset(4, 0))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

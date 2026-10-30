@@ -132,8 +132,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         money[p.currency] = (money[p.currency] ?? 0) + p.net;
       }
       final sub = '${active.length} active · ${done.length} completed${money.isEmpty ? '' : ' · ${money.entries.map((e) => fmtMoney(e.value, e.key)).join(' · ')}'}';
+      void add() => openEditor(context, const ProjectEditor());
       final newCard = DeskHover(
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProjectEditor(), fullscreenDialog: true)),
+        onTap: add,
         radius: 18,
         child: CustomPaint(
           painter: _DashedBorder(context.accent.withOpacity(0.35)),
@@ -153,35 +154,41 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               DeskHead('Projects', subtitle: sub, actions: [
                 DeskSeg<String>(items: const [('grid', 'Grid'), ('list', 'List'), ('board', 'Board')], value: view, onChanged: (v) => prefs.projectView = v),
-                DeskBtn('New project', kind: 'primary', icon: Icons.add_rounded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProjectEditor(), fullscreenDialog: true))),
+                DeskBtn('New project', kind: 'primary', icon: Icons.add_rounded, onTap: add),
               ]),
               const SizedBox(height: 14),
               if (!board)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.only(bottom: 16),
                   child: Wrap(spacing: 8, runSpacing: 8, children: [
                     DeskFilter('All · ${s.projects.length}', on: fStatus == 'all', onTap: () => setState(() => fStatus = 'all')),
                     for (final st in s.statuses)
-                      if (active.any((p) => p.status == st.key)) DeskFilter('${st.label} · ${active.where((p) => p.status == st.key).length}', on: fStatus == st.key, onTap: () => setState(() => fStatus = st.key)),
+                      if (st.key != 'complete' && active.any((p) => p.status == st.key)) DeskFilter('${st.label} · ${active.where((p) => p.status == st.key).length}', on: fStatus == st.key, onTap: () => setState(() => fStatus = st.key)),
                     if (done.isNotEmpty) DeskFilter('Completed · ${done.length}', on: fStatus == 'done', onTap: () => setState(() => fStatus = 'done')),
                   ]),
                 ),
               Expanded(
                 child: board
-                    ? _Board(store: s)
+                    ? _DeskBoard(store: s)
                     : grid
                         ? LayoutBuilder(builder: (context, c) {
-                            final n = (c.maxWidth / 260).floor().clamp(2, 6);
+                            final n = (c.maxWidth / 250).floor().clamp(2, 7);
                             final w = (c.maxWidth - 16 * (n - 1)) / n;
                             return GridView.builder(
                               padding: const EdgeInsets.only(bottom: 28),
-                              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: n, mainAxisSpacing: 16, crossAxisSpacing: 16, mainAxisExtent: w + ProjectTile.infoHeight),
+                              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: n, mainAxisSpacing: 16, crossAxisSpacing: 16, mainAxisExtent: w + _DeskProjectCard.metaHeight),
                               itemCount: shown.length + 1,
-                              itemBuilder: (_, i) => i == shown.length ? newCard : FadeIn(index: i, child: Opacity(opacity: shown[i].done ? 0.72 : 1, child: ProjectTile(p: shown[i]))),
+                              itemBuilder: (_, i) => i == shown.length ? newCard : FadeIn(index: i, child: _DeskProjectCard(p: shown[i])),
                             );
                           })
                         : ListView(padding: const EdgeInsets.only(bottom: 28), children: [
-                            for (var i = 0; i < shown.length; i++) FadeIn(index: i, child: Padding(padding: const EdgeInsets.only(bottom: 10), child: Opacity(opacity: shown[i].done ? 0.72 : 1, child: _SwipeProject(p: shown[i])))),
+                            DeskCard(
+                              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+                              child: Column(children: [
+                                for (var i = 0; i < shown.length; i++) _DeskProjectRow(p: shown[i], last: i == shown.length - 1),
+                                if (shown.isEmpty) Padding(padding: const EdgeInsets.all(18), child: Text('No projects here.', style: TextStyle(color: context.mutedText))),
+                              ]),
+                            ),
                           ]),
               ),
             ]),
@@ -586,4 +593,273 @@ class _DashedBorder extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DashedBorder o) => o.color != color;
+}
+
+
+// ======================= computers =======================
+
+/// Square cover: the project's image, or a soft gradient with its icon.
+class _DeskCover extends StatelessWidget {
+  final Project p;
+  final double radius;
+  final double iconSize;
+  const _DeskCover(this.p, {this.radius = 0, this.iconSize = 40});
+  @override
+  Widget build(BuildContext context) {
+    final c = pastel(p.color);
+    final grad = Container(
+      decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color.lerp(c.bg, Colors.white, 0.4)!, c.bg])),
+      child: Center(child: Icon(iconOf(p.icon), size: iconSize, color: c.fg.withOpacity(0.75))),
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: p.cover == null ? grad : Image.network(p.cover!.url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => grad),
+    );
+  }
+}
+
+String _dueText(Project p) {
+  if (p.deadline == null) return 'No deadline';
+  final now = DateTime.now();
+  final days = DateTime(p.deadline!.year, p.deadline!.month, p.deadline!.day).difference(DateTime(now.year, now.month, now.day)).inDays;
+  final d = fmtDue(p.deadline!);
+  if (p.done) return '$d · done';
+  if (days < 0) return '$d · ${-days} day${days == -1 ? '' : 's'} late';
+  if (days == 0) return '$d · today';
+  return '$d · $days day${days == 1 ? '' : 's'} left';
+}
+
+Color _dueColor(BuildContext context, Project p) {
+  if (p.deadline == null || p.done) return context.mutedText;
+  final now = DateTime.now();
+  final days = DateTime(p.deadline!.year, p.deadline!.month, p.deadline!.day).difference(DateTime(now.year, now.month, now.day)).inDays;
+  return days < 0 ? const Color(0xFFB42318) : (days <= 7 ? const Color(0xFF8A5A00) : context.mutedText);
+}
+
+/// Grid card from the web design: 1:1 cover with the status, details below.
+class _DeskProjectCard extends StatelessWidget {
+  final Project p;
+  const _DeskProjectCard({required this.p});
+  static const metaHeight = 146.0;
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<Store>();
+    final c = pastel(p.color);
+    final st = s.status(p.status);
+    final cat = s.projectCat(p.category);
+    final pr = s.progressOf(p.id);
+    final tasks = s.todosOf(p.id);
+    final muted = context.mutedText;
+    final showMoney = context.watch<Prefs>().showMoney;
+    return DeskHover(
+      onTap: () => openEditor(context, ProjectEditor(id: p.id)),
+      onSecondaryTap: () => showProjectActions(context, p),
+      radius: 18,
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: softCard(18, context.surface),
+        child: Opacity(
+          opacity: p.done ? 0.75 : 1,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            AspectRatio(
+              aspectRatio: 1,
+              child: Stack(fit: StackFit.expand, children: [
+                _DeskCover(p),
+                Positioned(top: 10, right: 10, child: deskChip(st.label, Colors.white.withOpacity(0.92), pastel(st.color).fg)),
+              ]),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, decoration: p.done ? TextDecoration.lineThrough : null)),
+                  Text.rich(TextSpan(children: [
+                    TextSpan(text: cat.label, style: TextStyle(color: pastel(cat.color).fg, fontWeight: FontWeight.w600)),
+                    if (p.priority < 5) TextSpan(text: ' · ${priorityName(p.priority)}', style: TextStyle(color: muted)),
+                  ]), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+                  Row(children: [Expanded(child: deskBar(pr, c.fg)), const SizedBox(width: 8), Text('${(pr * 100).round()}%', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: c.fg))]),
+                  Row(children: [
+                    Expanded(child: Text('${tasks.where((t) => t.done).length}/${tasks.length} tasks${p.files.isEmpty ? '' : ' · ${p.files.length} file${p.files.length == 1 ? '' : 's'}'}', maxLines: 1, style: TextStyle(fontSize: 12, color: muted))),
+                    if (showMoney && (p.amount ?? 0) > 0) Text(fmtMoney(p.net, p.currency), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF1E7A50))),
+                  ]),
+                  Text(_dueText(p), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _dueColor(context, p))),
+                ]),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// List row: 1:1 thumbnail on the left.
+class _DeskProjectRow extends StatelessWidget {
+  final Project p;
+  final bool last;
+  const _DeskProjectRow({required this.p, this.last = false});
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<Store>();
+    final c = pastel(p.color);
+    final st = s.status(p.status);
+    final cat = s.projectCat(p.category);
+    final pr = s.progressOf(p.id);
+    final tasks = s.todosOf(p.id);
+    final muted = context.mutedText;
+    return DeskHover(
+      wash: true,
+      onTap: () => openEditor(context, ProjectEditor(id: p.id)),
+      onSecondaryTap: () => showProjectActions(context, p),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(border: last ? null : Border(bottom: BorderSide(color: context.isDark ? Colors.white.withOpacity(0.05) : deskLine))),
+        child: Row(children: [
+          SizedBox(width: 64, height: 64, child: _DeskCover(p, radius: 12, iconSize: 24)),
+          const SizedBox(width: 14),
+          Expanded(
+            flex: 4,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, decoration: p.done ? TextDecoration.lineThrough : null)),
+              const SizedBox(height: 3),
+              Text('${cat.label}${p.priority < 5 ? ' · ${priorityName(p.priority)}' : ''}', maxLines: 1, style: TextStyle(fontSize: 12.5, color: muted)),
+            ]),
+          ),
+          Expanded(flex: 2, child: Align(alignment: Alignment.centerLeft, child: deskChip(st.label, pastel(st.color).bg, pastel(st.color).fg))),
+          Expanded(
+            flex: 3,
+            child: Row(children: [Expanded(child: deskBar(pr, c.fg)), const SizedBox(width: 8), SizedBox(width: 38, child: Text('${(pr * 100).round()}%', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: c.fg)))]),
+          ),
+          const SizedBox(width: 16),
+          SizedBox(width: 80, child: Text('${tasks.where((t) => t.done).length}/${tasks.length} tasks', style: TextStyle(fontSize: 12.5, color: muted))),
+          SizedBox(width: 90, child: Text((p.amount ?? 0) > 0 ? fmtMoney(p.net, p.currency) : '', textAlign: TextAlign.right, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Color(0xFF1E7A50)))),
+          SizedBox(width: 170, child: Text(_dueText(p), textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _dueColor(context, p)))),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Board like Trello: one column per status; drag a card to another column.
+class _DeskBoard extends StatefulWidget {
+  final Store store;
+  const _DeskBoard({required this.store});
+  @override
+  State<_DeskBoard> createState() => _DeskBoardState();
+}
+
+class _DeskBoardState extends State<_DeskBoard> {
+  String? over; // column being dragged over
+
+  void _move(Project p, String status) {
+    if (p.status == status) return;
+    p.status = status;
+    p.done = status == 'complete';
+    widget.store.saveProject(p);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.store;
+    final muted = context.mutedText;
+    return ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.only(bottom: 20), children: [
+      for (final st in s.statuses)
+        Builder(builder: (context) {
+          final list = s.projects.where((p) => p.status == st.key).toList();
+          final pc = pastel(st.color);
+          return Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: DragTarget<Project>(
+              onWillAcceptWithDetails: (d) {
+                setState(() => over = st.key);
+                return d.data.status != st.key;
+              },
+              onLeave: (_) => setState(() => over = null),
+              onAcceptWithDetails: (d) {
+                setState(() => over = null);
+                _move(d.data, st.key);
+              },
+              builder: (context, cand, _) => AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: 290,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: over == st.key && cand.isNotEmpty ? pc.bg.withOpacity(context.isDark ? 0.18 : 0.7) : (context.isDark ? Colors.white.withOpacity(0.03) : Colors.white.withOpacity(0.5)),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: over == st.key && cand.isNotEmpty ? pc.fg.withOpacity(0.5) : Colors.transparent, width: 1.5),
+                ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 4, 6, 10),
+                    child: Row(children: [
+                      Container(width: 10, height: 10, decoration: BoxDecoration(color: pc.fg, borderRadius: BorderRadius.circular(3))),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(st.label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14))),
+                      Text('${list.length}', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: muted)),
+                    ]),
+                  ),
+                  Expanded(
+                    child: ListView(children: [
+                      for (final p in list)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Draggable<Project>(
+                            data: p,
+                            feedback: Material(color: Colors.transparent, child: SizedBox(width: 270, child: Transform.rotate(angle: 0.03, child: _BoardCard(p: p, lifted: true)))),
+                            childWhenDragging: Opacity(opacity: 0.35, child: _BoardCard(p: p)),
+                            child: MouseRegion(cursor: SystemMouseCursors.grab, child: _BoardCard(p: p)),
+                          ),
+                        ),
+                      if (list.isEmpty)
+                        Container(
+                          height: 70,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: context.isDark ? Colors.white10 : const Color(0xFFE3E1F3))),
+                          child: Text('Drop a project here', style: TextStyle(fontSize: 12.5, color: muted)),
+                        ),
+                    ]),
+                  ),
+                ]),
+              ),
+            ),
+          );
+        }),
+    ]);
+  }
+}
+
+class _BoardCard extends StatelessWidget {
+  final Project p;
+  final bool lifted;
+  const _BoardCard({required this.p, this.lifted = false});
+  @override
+  Widget build(BuildContext context) {
+    final s = context.read<Store>();
+    final c = pastel(p.color);
+    final pr = s.progressOf(p.id);
+    final muted = context.mutedText;
+    return GestureDetector(
+      onTap: () => openEditor(context, ProjectEditor(id: p.id)),
+      onSecondaryTap: () => showProjectActions(context, p),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: softCard(14, context.surface).copyWith(
+          boxShadow: lifted ? [BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 24, offset: const Offset(0, 10))] : null,
+        ),
+        child: Row(children: [
+          SizedBox(width: 52, height: 52, child: _DeskCover(p, radius: 10, iconSize: 20)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+              const SizedBox(height: 6),
+              Row(children: [Expanded(child: deskBar(pr, c.fg, h: 5)), const SizedBox(width: 6), Text('${(pr * 100).round()}%', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.fg))]),
+              const SizedBox(height: 4),
+              Text(_dueText(p), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, color: p.deadline == null ? muted : _dueColor(context, p))),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
 }

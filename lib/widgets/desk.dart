@@ -104,7 +104,7 @@ class DeskBtn extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
-        hoverColor: Colors.black.withOpacity(0.04),
+        hoverColor: kind == 'primary' ? Colors.white.withOpacity(0.10) : context.accent.withOpacity(0.06),
         child: Container(
           height: height,
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -138,15 +138,13 @@ class DeskFilter extends StatelessWidget {
         radius: 99,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
-          height: 34,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: on ? context.accent : context.surface,
             borderRadius: BorderRadius.circular(99),
             boxShadow: on ? [BoxShadow(color: context.accent.withOpacity(0.25), blurRadius: 10, offset: const Offset(0, 3))] : const [BoxShadow(color: Color(0x0F281E6E), blurRadius: 2, offset: Offset(0, 1))],
           ),
-          child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: on ? Colors.white : const Color(0xFF4B4B5A))),
+          child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: on ? Colors.white : (context.isDark ? Colors.white70 : const Color(0xFF4B4B5A)))),
         ),
       );
 }
@@ -180,10 +178,10 @@ class _DeskHoverState extends State<DeskHover> {
             curve: Curves.easeOut,
             padding: widget.padding,
             decoration: BoxDecoration(
-              color: widget.wash && h ? (context.isDark ? Colors.white.withOpacity(0.06) : const Color(0xFFF6F5FF)) : Colors.transparent,
+              color: widget.wash && h ? (context.isDark ? Colors.white.withOpacity(0.04) : const Color(0xFFF7F5FF)) : Colors.transparent,
               borderRadius: BorderRadius.circular(widget.radius),
             ),
-            child: AnimatedOpacity(duration: const Duration(milliseconds: 140), opacity: !widget.wash && h && widget.onTap != null ? 0.86 : 1, child: widget.child),
+            child: AnimatedSlide(duration: const Duration(milliseconds: 160), curve: Curves.easeOut, offset: !widget.wash && h && widget.onTap != null ? const Offset(0, -0.01) : Offset.zero, child: widget.child),
           ),
         ),
       );
@@ -224,3 +222,62 @@ class DeskSwitch extends StatelessWidget {
 
 /// Pastel used for categories / kinds by index.
 Pastel deskPastel(int i) => pastel(i);
+
+/// Computers: open an editor (to-do, project…) in a popup with a close (×)
+/// button in the corner. Phones: open it as a normal page.
+Future<void> openEditor(BuildContext context, Widget editor) {
+  if (!isDesktop(context)) return Navigator.push(context, MaterialPageRoute(builder: (_) => editor));
+  return showDialog(
+    context: context,
+    barrierColor: Colors.black.withOpacity(0.28),
+    builder: (d) {
+      final size = MediaQuery.sizeOf(d);
+      return Dialog(
+        insetPadding: const EdgeInsets.all(24),
+        clipBehavior: Clip.antiAlias,
+        backgroundColor: Theme.of(d).colorScheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: 720, maxHeight: size.height * 0.88),
+          child: SizedBox(
+            width: 720,
+            height: size.height * 0.88,
+            child: Stack(children: [
+              // Its own navigator, so "Save" (which goes back) closes just the popup.
+              Positioned.fill(
+                child: NoBack(
+                  child: Navigator(
+                    onGenerateRoute: (_) => PageRouteBuilder(pageBuilder: (_, __, ___) => editor, transitionDuration: Duration.zero),
+                    observers: [_CloseOnEmpty(d)],
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 12,
+                right: 12,
+                child: Tooltip(
+                  message: 'Close',
+                  child: Material(
+                    color: Theme.of(d).brightness == Brightness.dark ? Colors.white.withOpacity(0.08) : const Color(0xFFF1F0FA),
+                    shape: const CircleBorder(),
+                    child: InkWell(customBorder: const CircleBorder(), onTap: () => Navigator.of(d).pop(), child: const SizedBox(width: 36, height: 36, child: Icon(Icons.close_rounded, size: 20))),
+                  ),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/// When the editor inside the popup goes back (after Save / Delete), close the popup.
+class _CloseOnEmpty extends NavigatorObserver {
+  final BuildContext dialog;
+  _CloseOnEmpty(this.dialog);
+  @override
+  void didPop(Route route, Route? previousRoute) {
+    if (previousRoute == null) WidgetsBinding.instance.addPostFrameCallback((_) => Navigator.of(dialog).pop());
+  }
+}

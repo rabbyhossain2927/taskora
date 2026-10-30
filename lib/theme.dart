@@ -160,7 +160,7 @@ class T {
 
 ThemeData buildTheme(AppThemeOption t, Brightness b, {String bgStyle = 'glow'}) {
   final dark = b == Brightness.dark;
-  final surface = dark ? const Color(0xFF1B1B23) : Colors.white;
+  final surface = dark ? const Color(0xFF16161C) : Colors.white;
   final ink = dark ? const Color(0xFFEDEDF3) : C.ink;
   final muted = dark ? const Color(0xFFA0A0B0) : C.muted;
   final scheme = ColorScheme.fromSeed(seedColor: t.accent, brightness: b).copyWith(
@@ -178,7 +178,12 @@ ThemeData buildTheme(AppThemeOption t, Brightness b, {String bgStyle = 'glow'}) 
   return base.copyWith(
     // Pages are transparent; AppBackground paints the colour + style behind each page.
     scaffoldBackgroundColor: Colors.transparent,
-    canvasColor: dark ? const Color(0xFF111117) : C.bg,
+    canvasColor: dark ? const Color(0xFF0C0C10) : C.bg,
+    // Soft, light hover / press colours (no grey-black wash).
+    hoverColor: t.accent.withOpacity(dark ? 0.08 : 0.05),
+    highlightColor: t.accent.withOpacity(dark ? 0.06 : 0.04),
+    splashColor: t.accent.withOpacity(dark ? 0.10 : 0.07),
+    focusColor: t.accent.withOpacity(0.10),
     textTheme: text,
     pageTransitionsTheme: PageTransitionsTheme(builders: {
       for (final p in TargetPlatform.values) p: BackgroundPageTransitionsBuilder(t, dark, bgStyle),
@@ -195,7 +200,7 @@ ThemeData buildTheme(AppThemeOption t, Brightness b, {String bgStyle = 'glow'}) 
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: dark ? const Color(0xFF22222B) : Colors.white,
+      fillColor: dark ? const Color(0xFF1C1C23) : Colors.white,
       hintStyle: TextStyle(color: muted, fontWeight: FontWeight.w400),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: dark ? Colors.white12 : C.line)),
@@ -274,8 +279,12 @@ class AppBackground extends StatelessWidget {
   const AppBackground({super.key, required this.t, required this.dark, required this.style, required this.child, this.constrain = false});
   @override
   Widget build(BuildContext context) {
-    final base = dark ? const Color(0xFF111117) : C.bg;
+    final base = dark ? const Color(0xFF0C0C10) : C.bg;
     final wide = constrain && MediaQuery.sizeOf(context).width >= 1000;
+    // Computers, dark: plain deep background, nothing painted on top.
+    if (dark && MediaQuery.sizeOf(context).width >= 700) {
+      return ColoredBox(color: base, child: wide ? Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 980), child: child)) : child);
+    }
     // Computers, light, "Soft glow": the pastel pink / blue / mint wash from the web design.
     if (!dark && style == 'glow' && MediaQuery.sizeOf(context).width >= 700) {
       final inner = wide ? Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 980), child: child)) : child;

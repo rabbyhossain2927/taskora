@@ -43,7 +43,7 @@ void showTodoActions(BuildContext context, Todo t, {VoidCallback? onSelect}) {
   HapticFeedback.mediumImpact();
   showActions(context, title: t.title.isEmpty ? 'To-do' : t.title, items: [
     ActionItem(t.done ? Icons.replay_rounded : Icons.check_circle_outline_rounded, t.done ? 'Mark as not done' : 'Mark as done', () => s.toggleTodo(t)),
-    ActionItem(Icons.edit_outlined, 'Edit', () => Navigator.push(context, MaterialPageRoute(builder: (_) => TodoEditor(id: t.id)))),
+    ActionItem(Icons.edit_outlined, 'Edit', () => openEditor(context, TodoEditor(id: t.id))),
     ActionItem(Icons.low_priority_rounded, 'Change priority', () async {
       final v = await askPriority(context, t.priority);
       if (v != null) {
@@ -97,7 +97,7 @@ class _TodoRowState extends State<TodoRow> {
     final subDone = t.subtasks.where((x) => x.done).length;
     final row = InkWell(
       borderRadius: BorderRadius.circular(16),
-      onTap: widget.selecting ? widget.onSelectToggle : () => Navigator.push(context, MaterialPageRoute(builder: (_) => TodoEditor(id: t.id))),
+      onTap: widget.selecting ? widget.onSelectToggle : () => openEditor(context, TodoEditor(id: t.id)),
       onLongPress: widget.selecting ? widget.onSelectToggle : () => showTodoActions(context, t, onSelect: widget.onStartSelect),
       onSecondaryTap: widget.selecting ? widget.onSelectToggle : () => showTodoActions(context, t, onSelect: widget.onStartSelect), // right-click on computers
       child: AnimatedContainer(
@@ -295,7 +295,7 @@ class _TodosScreenState extends State<TodosScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               DeskHead('To-do', subtitle: '${open.length} open${groups['Overdue']!.isEmpty ? '' : ' · ${groups['Overdue']!.length} overdue'} · ${doneToday.length} done today', actions: [
                 DeskSeg<String>(items: const [('all', 'All'), ('today', 'Today'), ('upcoming', 'Upcoming'), ('done', 'Done')], value: show, onChanged: (v) => setState(() => show = v)),
-                DeskBtn('New to-do', kind: 'primary', icon: Icons.add_rounded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TodoEditor(), fullscreenDialog: true))),
+                DeskBtn('New to-do', kind: 'primary', icon: Icons.add_rounded, onTap: () => openEditor(context, const TodoEditor())),
               ]),
               const SizedBox(height: 14),
               DeskCard(

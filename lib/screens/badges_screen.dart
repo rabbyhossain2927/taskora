@@ -6,12 +6,42 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'profile_screen.dart';
 
-class _Sticker {
+class Sticker {
   final String emoji, name, how;
   final int color;
   final double progress; // 0..1
-  const _Sticker(this.emoji, this.name, this.how, this.color, this.progress);
+  const Sticker(this.emoji, this.name, this.how, this.color, this.progress);
   bool get earned => progress >= 1;
+}
+
+/// All stickers with progress (earned when progress reaches 1).
+List<Sticker> stickersOf(Store s) {
+  final done = s.todos.where((t) => t.done && t.completedAt != null).toList();
+  final streak = streakOf(s);
+    double r(num a, num b) => (a / b).clamp(0, 1).toDouble();
+    final early = done.where((t) => t.completedAt!.hour < 9).length;
+    final night = done.where((t) => t.completedAt!.hour >= 22).length;
+  return [
+      Sticker('🚀', 'Lift-off', 'Create your first project', 0, r(s.projects.length, 1)),
+      Sticker('✅', 'Getting going', 'Finish 10 to-dos', 8, r(done.length, 10)),
+      Sticker('🏆', 'Half-century', 'Finish 50 to-dos', 6, r(done.length, 50)),
+      Sticker('🔥', 'On fire', 'Keep a 3-day streak', 4, r(streak, 3)),
+      Sticker('🌋', 'Unstoppable', 'Keep a 7-day streak', 2, r(streak, 7)),
+      Sticker('📝', 'Note taker', 'Write 10 notes', 12, r(s.notes.length, 10)),
+      Sticker('💸', 'Getting paid', 'Add money to a project', 9, r(s.projects.where((p) => (p.amount ?? 0) > 0).length, 1)),
+      Sticker('🌅', 'Early bird', 'Finish 5 to-dos before 9 am', 5, r(early, 5)),
+      Sticker('🦉', 'Night owl', 'Finish 5 to-dos after 10 pm', 14, r(night, 5)),
+      Sticker('🗂️', 'Organiser', 'Make 3 note sections', 10, r(s.sections.length, 3)),
+      Sticker('🎯', 'Closer', 'Complete 3 projects', 13, r(s.projects.where((p) => p.done).length, 3)),
+      Sticker('🧩', 'Breaker-down', 'Add 10 sub-tasks', 1, r(s.todos.fold<int>(0, (a, t) => a + t.subtasks.length), 10)),
+    ];
+}
+
+/// XP level (same maths as the sticker book).
+int levelOf(Store s) {
+  final done = s.todos.where((t) => t.done && t.completedAt != null).length;
+  final xp = done * 10 + s.projects.length * 25 + s.notes.length * 5 + s.projects.where((p) => p.done).length * 50;
+  return (math.sqrt(xp / 50)).floor() + 1;
 }
 
 /// Achievements: streak flame, XP level and a sticker book.
@@ -38,23 +68,7 @@ class _BadgesScreenState extends State<BadgesScreen> with SingleTickerProviderSt
     final xp = done.length * 10 + s.projects.length * 25 + s.notes.length * 5 + s.projects.where((p) => p.done).length * 50;
     final level = (math.sqrt(xp / 50)).floor() + 1;
     final thisLevel = 50 * (level - 1) * (level - 1), nextLevel = 50 * level * level;
-    double r(num a, num b) => (a / b).clamp(0, 1).toDouble();
-    final early = done.where((t) => t.completedAt!.hour < 9).length;
-    final night = done.where((t) => t.completedAt!.hour >= 22).length;
-    final stickers = [
-      _Sticker('🚀', 'Lift-off', 'Create your first project', 0, r(s.projects.length, 1)),
-      _Sticker('✅', 'Getting going', 'Finish 10 to-dos', 8, r(done.length, 10)),
-      _Sticker('🏆', 'Half-century', 'Finish 50 to-dos', 6, r(done.length, 50)),
-      _Sticker('🔥', 'On fire', 'Keep a 3-day streak', 4, r(streak, 3)),
-      _Sticker('🌋', 'Unstoppable', 'Keep a 7-day streak', 2, r(streak, 7)),
-      _Sticker('📝', 'Note taker', 'Write 10 notes', 12, r(s.notes.length, 10)),
-      _Sticker('💸', 'Getting paid', 'Add money to a project', 9, r(s.projects.where((p) => (p.amount ?? 0) > 0).length, 1)),
-      _Sticker('🌅', 'Early bird', 'Finish 5 to-dos before 9 am', 5, r(early, 5)),
-      _Sticker('🦉', 'Night owl', 'Finish 5 to-dos after 10 pm', 14, r(night, 5)),
-      _Sticker('🗂️', 'Organiser', 'Make 3 note sections', 10, r(s.sections.length, 3)),
-      _Sticker('🎯', 'Closer', 'Complete 3 projects', 13, r(s.projects.where((p) => p.done).length, 3)),
-      _Sticker('🧩', 'Breaker-down', 'Add 10 sub-tasks', 1, r(s.todos.fold<int>(0, (a, t) => a + t.subtasks.length), 10)),
-    ];
+    final stickers = stickersOf(s);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final doneDays = done.map((t) => DateTime(t.completedAt!.year, t.completedAt!.month, t.completedAt!.day)).toSet();
@@ -148,7 +162,7 @@ class _BadgesScreenState extends State<BadgesScreen> with SingleTickerProviderSt
     );
   }
 
-  Widget _stickerTile(BuildContext context, _Sticker st, int i) {
+  Widget _stickerTile(BuildContext context, Sticker st, int i) {
     final c = pastel(st.color);
     final angle = [-0.06, 0.04, -0.02, 0.05, -0.04, 0.03][i % 6];
     return GestureDetector(
