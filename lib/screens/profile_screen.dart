@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
@@ -27,6 +28,7 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.sizeOf(context).width >= 1000) return const _DesktopAccount();
     final s = context.watch<Store>();
     final u = FirebaseAuth.instance.currentUser;
     final done = s.todos.where((t) => t.done).length;
@@ -187,6 +189,303 @@ class ProfileScreen extends StatelessWidget {
           ]),
         ),
       );
+}
+
+/// Computers: the web design's Account page (settings menu on the left).
+class _DesktopAccount extends StatelessWidget {
+  const _DesktopAccount();
+
+  void _open(BuildContext context, Widget page) => Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<Store>();
+    final p = context.watch<Prefs>();
+    final u = FirebaseAuth.instance.currentUser;
+    final muted = context.mutedText;
+    final google = u?.providerData.any((x) => x.providerId == 'google.com') ?? false;
+    final since = u?.metadata.creationTime;
+    final last = u?.metadata.lastSignInTime;
+    final off = DateTime.now().timeZoneOffset;
+    final tz = 'GMT${off.isNegative ? '-' : '+'}${off.inHours.abs()}${off.inMinutes % 60 == 0 ? '' : ':${(off.inMinutes.abs() % 60).toString().padLeft(2, '0')}'}';
+    final syncText = s.syncError != null ? 'Offline — will sync later' : (s.syncing ? 'Syncing…' : (s.hasPendingWrites ? '${s.pendingCount} changes waiting' : 'Everything is synced'));
+    final syncColor = s.syncError != null ? C.red : (s.hasPendingWrites || s.syncing ? const Color(0xFFD48806) : const Color(0xFF23845A));
+
+    Widget card(Widget child, {Color? color, Gradient? gradient}) => Container(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+          decoration: softCard(18, color ?? context.surface).copyWith(gradient: gradient),
+          child: child,
+        );
+    Widget h(String t, [Widget? trailing]) => Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(children: [Expanded(child: Text(t, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700))), if (trailing != null) trailing]),
+        );
+    Widget row(String k, String v, {bool last = false}) => Container(
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          decoration: BoxDecoration(border: last ? null : Border(bottom: BorderSide(color: context.isDark ? Colors.white10 : const Color(0xFFF1F0F8)))),
+          child: Row(children: [
+            SizedBox(width: 130, child: Text(k, style: TextStyle(fontSize: 13.5, color: muted))),
+            Expanded(child: Text(v, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600))),
+          ]),
+        );
+    Widget btn(String t, VoidCallback onTap, {Color bg = const Color(0xFFF1F0FA), Color fg = const Color(0xFF3B2E8F), bool wide = false}) => Material(
+          color: bg,
+          borderRadius: BorderRadius.circular(11),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(11),
+            onTap: onTap,
+            child: Container(
+              height: 38,
+              width: wide ? double.infinity : null,
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Text(t, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: fg)),
+            ),
+          ),
+        );
+    Widget pill(String t, Color bg, Color fg) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(99)),
+          child: Text(t, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: fg)),
+        );
+    Widget check(String t) => Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(children: [const Icon(Icons.check_rounded, size: 17, color: Color(0xFF1E7A50)), const SizedBox(width: 8), Expanded(child: Text(t, style: const TextStyle(fontSize: 13.5)))]),
+        );
+
+    // ---------- settings menu ----------
+    Widget sub(String t, Widget? page, {bool on = false}) => InkWell(
+          borderRadius: BorderRadius.circular(11),
+          onTap: page == null ? null : () => _open(context, page),
+          child: Container(
+            height: 38,
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(11),
+              gradient: on && !context.isDark ? const LinearGradient(colors: [Color(0xFFE9E6FF), Color(0xFFFFE6F1)]) : null,
+              color: on && context.isDark ? Colors.white10 : null,
+            ),
+            child: Text(t, style: TextStyle(fontSize: 13.5, fontWeight: on ? FontWeight.w700 : FontWeight.w500, color: on ? const Color(0xFF3B2E8F) : null)),
+          ),
+        );
+    final menu = Container(
+      width: 210,
+      padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
+      decoration: softCard(18, context.surface),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+        const Padding(padding: EdgeInsets.fromLTRB(12, 4, 12, 10), child: Text('Settings', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.4))),
+        sub('Account', null, on: true),
+        sub('Theme', const ThemeScreen()),
+        sub('Preferences', const PreferencesScreen()),
+        sub('Notifications', const NotificationSettingsScreen()),
+        sub('Backup & sync', const BackupScreen()),
+        sub('Tags, statuses, categories', const PreferencesScreen()),
+        sub('Sticker book', const BadgesScreen()),
+        sub('How to use', const HowToScreen()),
+        sub('Send feedback', const FeedbackScreen()),
+        sub('About', const AboutScreen()),
+      ]),
+    );
+
+    // ---------- banner ----------
+    final banner = Container(
+      padding: const EdgeInsets.fromLTRB(24, 22, 24, 22),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(colors: context.isDark ? const [Color(0xFF3A2E5C), Color(0xFF2A2F55)] : const [Color(0xFFFFD9EC), Color(0xFFE6DEFF), Color(0xFFD6ECFF)], stops: context.isDark ? null : const [0, 0.45, 1]),
+        boxShadow: const [BoxShadow(color: Color(0x1F7859DC), blurRadius: 30, offset: Offset(0, 10))],
+      ),
+      child: Row(children: [
+        Container(
+          decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 4), boxShadow: const [BoxShadow(color: Color(0x407859DC), blurRadius: 16, offset: Offset(0, 6))]),
+          child: const Avatar(size: 72, ring: false),
+        ),
+        const SizedBox(width: 18),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(u?.displayName ?? 'You', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.4)),
+            Text(u?.email ?? '', style: TextStyle(fontSize: 13.5, color: context.isDark ? Colors.white70 : const Color(0xFF4B4B5A))),
+            const SizedBox(height: 10),
+            Wrap(spacing: 8, runSpacing: 6, children: [
+              pill('Free plan', Colors.white, const Color(0xFF4A3FC4)),
+              pill(google ? 'Signed in with Google' : 'Signed in with email', Colors.white.withOpacity(0.7), const Color(0xFF33333F)),
+              pill(syncText, s.syncError != null ? C.redBg : const Color(0xFFDDF5E8), s.syncError != null ? C.red : const Color(0xFF1E7A50)),
+            ]),
+          ]),
+        ),
+      ]),
+    );
+
+    final details = card(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      h('Account details', btn('Edit', () => _open(context, const EditProfileScreen()))),
+      row('Name', u?.displayName ?? '—'),
+      row('Email', u?.email ?? '—'),
+      row('Sign-in', google ? 'Google' : 'Email and password'),
+      row('Member since', since == null ? '—' : DateFormat('MMMM y').format(since)),
+      row('Time zone', '${DateTime.now().timeZoneName} ($tz)'),
+      row('Language', 'English', last: true),
+    ]));
+
+    final plan = card(
+      gradient: context.isDark ? null : const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white, Colors.white, Color(0xFFF3EEFF)], stops: [0, 0.4, 1]),
+      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        h('Plan & usage'),
+        Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+          const Text('Free', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+          const SizedBox(width: 8),
+          Text('your current plan', style: TextStyle(fontSize: 13, color: muted)),
+        ]),
+        const SizedBox(height: 12),
+        check('Unlimited projects, to-dos and notes'),
+        check('Sync on phone and web'),
+        check('Backup to a file or Google Drive'),
+        const SizedBox(height: 4),
+        Text('${s.projects.length} projects · ${s.todos.length} to-dos · ${s.notes.length} notes', style: TextStyle(fontSize: 12.5, color: muted)),
+        const SizedBox(height: 14),
+        Row(children: [
+          Expanded(child: btn('Upgrade to Pro', () => toast(context, 'Pro plans are coming soon.'), bg: C.ink, fg: Colors.white, wide: true)),
+          const SizedBox(width: 8),
+          const SoonPill(),
+        ]),
+      ]),
+    );
+
+    final security = card(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      h('Security'),
+      Container(
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: context.isDark ? Colors.white10 : const Color(0xFFF1F0F8)))),
+        child: Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('This browser', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
+              Text(last == null ? 'Web app' : 'Web app · signed in ${fmtDue(last)}', style: TextStyle(fontSize: 12.5, color: muted)),
+            ]),
+          ),
+          pill('This device', const Color(0xFFDDF5E8), const Color(0xFF1E7A50)),
+        ]),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        child: Text('Your phone app stays signed in on its own. Signing out here only signs out this browser.', style: TextStyle(fontSize: 12.5, color: muted, height: 1.45)),
+      ),
+      const SizedBox(height: 4),
+      Row(children: [
+        btn('Sign out', () async {
+          Navigator.of(context).popUntil((r) => r.isFirst);
+          await AuthService.signOut();
+        }, bg: C.redBg, fg: const Color(0xFFB42318)),
+        const Spacer(),
+        TextButton(onPressed: () => _open(context, const EditProfileScreen()), style: TextButton.styleFrom(foregroundColor: const Color(0xFFB42318)), child: const Text('Delete account')),
+      ]),
+    ]));
+
+    final backup = card(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      h('Backup & storage'),
+      Row(children: [
+        Container(width: 10, height: 10, decoration: BoxDecoration(color: syncColor, shape: BoxShape.circle)),
+        const SizedBox(width: 10),
+        Expanded(child: Text(syncText, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5))),
+      ]),
+      const SizedBox(height: 10),
+      Text('Your data syncs to your own server. Keep an extra copy as a file or in Google Drive.', style: TextStyle(fontSize: 12.5, color: muted, height: 1.45)),
+      const SizedBox(height: 14),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        btn('Back up or restore', () => _open(context, const BackupScreen()), bg: context.accent, fg: Colors.white),
+        btn('Sync now', () => s.sync()),
+        btn('Archive & Trash', () => _open(context, const BinScreen(trash: false))),
+      ]),
+    ]));
+
+    // ---------- theme ----------
+    final themeIdx = p.themeIndex.clamp(0, appThemes.length - 1);
+    final theme = card(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      h('Theme'),
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Colour · ${appThemes[themeIdx].name}', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: muted)),
+            const SizedBox(height: 8),
+            Wrap(spacing: 10, runSpacing: 10, children: [
+              for (var i = 0; i < appThemes.length; i++)
+                Tooltip(
+                  message: appThemes[i].name,
+                  child: GestureDetector(
+                    onTap: () => p.themeIndex = i,
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: appThemes[i].accent,
+                          shape: BoxShape.circle,
+                          border: i == themeIdx ? Border.all(color: context.isDark ? Colors.white : C.ink, width: 3) : null,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ]),
+          ]),
+        ),
+        const SizedBox(width: 24),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Background', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: muted)),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final b in bgStyles)
+                GestureDetector(
+                  onTap: () => p.bgStyle = b.$1,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: Container(
+                      width: 92,
+                      height: 52,
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: p.bgStyle == b.$1 ? context.accent : const Color(0xFFE3E1F3), width: p.bgStyle == b.$1 ? 2 : 1)),
+                      child: Stack(children: [
+                        Positioned.fill(child: AppBackground(t: appThemes[themeIdx], dark: context.isDark, style: b.$1, child: const SizedBox())),
+                        Positioned(left: 8, bottom: 6, child: Text(b.$2, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: p.bgStyle == b.$1 ? const Color(0xFF4A4ED6) : null))),
+                      ]),
+                    ),
+                  ),
+                ),
+            ]),
+            const SizedBox(height: 12),
+            SizedBox(width: 320, child: Segmented<String>(items: const [('light', 'Light'), ('dark', 'Dark'), ('system', 'Match device')], value: p.themeMode, onChanged: (v) => p.themeMode = v)),
+          ]),
+        ),
+      ]),
+    ]));
+
+    Widget pair(Widget a, Widget b) => IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Expanded(child: a), const SizedBox(width: 18), Expanded(child: b)]));
+
+    return Scaffold(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(28, 22, 28, 28),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            menu,
+            const SizedBox(width: 18),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                banner,
+                const SizedBox(height: 18),
+                pair(details, plan),
+                const SizedBox(height: 18),
+                pair(security, backup),
+                const SizedBox(height: 18),
+                theme,
+              ]),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
 }
 
 class EditProfileScreen extends StatefulWidget {

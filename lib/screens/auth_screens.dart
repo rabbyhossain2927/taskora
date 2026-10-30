@@ -7,32 +7,7 @@ class Logo extends StatelessWidget {
   final double size;
   const Logo({super.key, this.size = 76});
   @override
-  Widget build(BuildContext context) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(color: context.accent, borderRadius: BorderRadius.circular(size * 0.32)),
-        child: CustomPaint(painter: _LogoPainter()),
-      );
-}
-
-class _LogoPainter extends CustomPainter {
-  @override
-  void paint(Canvas c, Size s) {
-    final u = s.width / 76;
-    c.save();
-    c.translate(15 * u, 15 * u);
-    c.scale(u * 46 / 48);
-    final w = Paint()..color = Colors.white;
-    c.drawLine(const Offset(16, 34), const Offset(30, 14), Paint()..color = Colors.white.withOpacity(0.85)..strokeWidth = 12..strokeCap = StrokeCap.round);
-    c.drawCircle(const Offset(13, 14), 7, w);
-    c.drawRRect(RRect.fromRectAndRadius(const Rect.fromLTWH(24, 4, 20, 18), const Radius.circular(6)), Paint()..color = const Color(0xFFE6DEFF));
-    c.drawCircle(const Offset(15, 35), 10, w);
-    c.drawCircle(const Offset(35, 35), 7, Paint()..color = const Color(0xFFCDBEFF));
-    c.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  Widget build(BuildContext context) => Image.asset('assets/logo.png', width: size, height: size, filterQuality: FilterQuality.medium);
 }
 
 class _Wordmark extends StatelessWidget {
@@ -41,7 +16,7 @@ class _Wordmark extends StatelessWidget {
   Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
         const Logo(size: 34),
         const SizedBox(width: 10),
-        Text.rich(TextSpan(children: [const TextSpan(text: 'Task'), TextSpan(text: 'Ora', style: TextStyle(color: context.accent))]),
+        Text.rich(TextSpan(children: [const TextSpan(text: 'Task'), const TextSpan(text: 'Ora', style: TextStyle(color: Color(0xFF7054FB)))]),
             style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -0.4)),
       ]);
 }

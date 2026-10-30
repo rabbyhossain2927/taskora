@@ -212,10 +212,192 @@ class _NotesScreenState extends State<NotesScreen> {
         picked.clear();
       });
 
+  // Computers: folders | notes list | open note (web design).
+  String folder = 'all'; // all | pinned | none | folder id
+  String? openId;
+
+  Widget _desktop(BuildContext context, Store s) {
+    final muted = context.mutedText;
+    bool inFolder(Note n) => switch (folder) {
+          'all' => true,
+          'pinned' => n.pinned,
+          'none' => n.sectionId == null || s.sections.every((x) => x.id != n.sectionId),
+          _ => n.sectionId == folder,
+        };
+    final list = s.notes.where((n) => inFolder(n) && (tag == null || n.tags.contains(tag)) && (q.isEmpty || n.title.toLowerCase().contains(q) || n.allText.toLowerCase().contains(q))).toList()
+      ..sort((a, b) => a.pinned != b.pinned ? (a.pinned ? -1 : 1) : b.updatedAt.compareTo(a.updatedAt));
+    final isFolder = !const {'all', 'pinned', 'none'}.contains(folder);
+    final open = list.where((n) => n.id == openId).firstOrNull ?? list.firstOrNull;
+    final title = switch (folder) { 'all' => 'All notes', 'pinned' => 'Pinned', 'none' => 'No folder', _ => s.sections.where((x) => x.id == folder).firstOrNull?.title ?? 'Notes' };
+
+    Widget fold(String key, IconData icon, String label, int count, Color c) {
+      final on = folder == key;
+      return InkWell(
+        borderRadius: BorderRadius.circular(11),
+        onTap: () => setState(() {
+          folder = key;
+          openId = null;
+        }),
+        child: Container(
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(color: on ? (context.isDark ? Colors.white10 : const Color(0xFFEEEEFD)) : null, borderRadius: BorderRadius.circular(11)),
+          child: Row(children: [
+            Icon(icon, size: 18, color: on ? context.accent : c),
+            const SizedBox(width: 10),
+            Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5, fontWeight: on ? FontWeight.w700 : FontWeight.w500, color: on ? const Color(0xFF4A4ED6) : null))),
+            Text('$count', style: TextStyle(fontSize: 12, color: on ? const Color(0xFF4A4ED6) : muted)),
+          ]),
+        ),
+      );
+    }
+
+    Widget tb(IconData ic, String tip, VoidCallback onTap, {bool main = false}) => Tooltip(
+          message: tip,
+          child: Material(
+            color: main ? context.accent : (context.isDark ? Colors.white10 : const Color(0xFFF4F3FB)),
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(borderRadius: BorderRadius.circular(10), onTap: onTap, child: SizedBox(width: 34, height: 34, child: Icon(ic, size: 18, color: main ? Colors.white : const Color(0xFF4B4B5A)))),
+          ),
+        );
+
+    final folders = Container(
+      width: 220,
+      padding: const EdgeInsets.fromLTRB(8, 14, 8, 14),
+      decoration: softCard(18, context.surface),
+      child: ListView(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 4, 8),
+          child: Row(children: [
+            Expanded(child: Text('Folders', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: muted))),
+            tb(Icons.add_rounded, 'New folder', () async {
+              final name = await askText(context, title: 'New folder', hint: 'e.g. Client briefs');
+              if (name != null && name.isNotEmpty) s.saveSection(NoteSection(id: newId(), title: name, order: s.sections.length));
+            }),
+          ]),
+        ),
+        fold('all', Icons.notes_rounded, 'All notes', s.notes.length, muted),
+        fold('pinned', Icons.push_pin_outlined, 'Pinned', s.notes.where((n) => n.pinned).length, muted),
+        const Padding(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6), child: Divider()),
+        for (var i = 0; i < s.sections.length; i++)
+          GestureDetector(
+            onSecondaryTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FolderScreen(id: s.sections[i].id))),
+            child: fold(s.sections[i].id, Icons.folder_rounded, s.sections[i].title, s.notes.where((n) => n.sectionId == s.sections[i].id).length, pastel((i * 3 + 2) % pastels.length).fg),
+          ),
+        fold('none', Icons.folder_outlined, 'No folder', s.notes.where((n) => n.sectionId == null || s.sections.every((x) => x.id != n.sectionId)).length, muted),
+        if (s.tags.isNotEmpty) ...[
+          const Padding(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6), child: Divider()),
+          Padding(padding: const EdgeInsets.fromLTRB(8, 4, 8, 8), child: Text('Tags', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: muted))),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Wrap(spacing: 6, runSpacing: 6, children: [
+              for (var i = 0; i < s.tags.length; i++)
+                InkWell(
+                  borderRadius: BorderRadius.circular(99),
+                  onTap: () => setState(() => tag = tag == s.tags[i] ? null : s.tags[i]),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: pastel((i * 5) % pastels.length).bg,
+                      borderRadius: BorderRadius.circular(99),
+                      border: Border.all(color: tag == s.tags[i] ? pastel((i * 5) % pastels.length).fg : Colors.transparent, width: 1.5),
+                    ),
+                    child: Text('#${s.tags[i]}', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: pastel((i * 5) % pastels.length).fg)),
+                  ),
+                ),
+            ]),
+          ),
+        ],
+      ]),
+    );
+
+    final notesList = Container(
+      width: 320,
+      padding: const EdgeInsets.fromLTRB(10, 14, 10, 10),
+      decoration: softCard(18, context.surface),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(6, 0, 4, 8),
+          child: Row(children: [
+            Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.4))),
+            if (isFolder)
+              Padding(padding: const EdgeInsets.only(right: 6), child: tb(Icons.more_horiz_rounded, 'Folder options', () => Navigator.push(context, MaterialPageRoute(builder: (_) => FolderScreen(id: folder))))),
+            tb(Icons.download_rounded, 'Import a document', () => importNotes(context, folderId: isFolder ? folder : null)),
+            const SizedBox(width: 6),
+            tb(Icons.add_rounded, 'New note', () => Navigator.push(context, MaterialPageRoute(builder: (_) => NoteEditor(sectionId: isFolder ? folder : null), fullscreenDialog: true)), main: true),
+          ]),
+        ),
+        Container(
+          height: 38,
+          margin: const EdgeInsets.fromLTRB(4, 0, 4, 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(color: context.isDark ? Colors.white10 : const Color(0xFFF4F3FB), borderRadius: BorderRadius.circular(11)),
+          child: Row(children: [
+            Icon(Icons.search_rounded, size: 17, color: muted),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                onChanged: (v) => setState(() => q = v.trim().toLowerCase()),
+                style: const TextStyle(fontSize: 13.5),
+                decoration: const InputDecoration(hintText: 'Search notes', border: InputBorder.none, enabledBorder: InputBorder.none, focusedBorder: InputBorder.none, filled: false, isDense: true, contentPadding: EdgeInsets.zero),
+              ),
+            ),
+          ]),
+        ),
+        const Divider(),
+        Expanded(
+          child: list.isEmpty
+              ? Padding(padding: const EdgeInsets.all(16), child: Text(s.notes.isEmpty ? 'No notes yet. Tap + to write one.' : 'No notes here.', style: TextStyle(color: muted)))
+              : ListView(padding: const EdgeInsets.only(top: 6), children: [
+                  for (final n in list)
+                    InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => setState(() => openId = n.id),
+                      onSecondaryTap: () => showNoteActions(context, n),
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                        margin: const EdgeInsets.only(bottom: 2),
+                        decoration: BoxDecoration(color: n.id == open?.id ? (context.isDark ? Colors.white10 : const Color(0xFFF1EFFF)) : null, borderRadius: BorderRadius.circular(12)),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Row(children: [
+                            Container(width: 10, height: 10, decoration: BoxDecoration(color: n.color == 0 ? const Color(0xFFCDBEFF) : Color.lerp(noteColor(n.color), Colors.black, 0.1), borderRadius: BorderRadius.circular(3))),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(n.title.isEmpty ? 'Untitled' : n.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: n.id == open?.id ? FontWeight.w700 : FontWeight.w600))),
+                            if (n.pinned) Icon(Icons.push_pin, size: 14, color: context.accent),
+                          ]),
+                          if (n.preview.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(n.preview, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, height: 1.45, color: muted))),
+                          Padding(padding: const EdgeInsets.only(top: 4), child: Text(fmtDue(n.updatedAt), style: TextStyle(fontSize: 11.5, color: muted))),
+                        ]),
+                      ),
+                    ),
+                ]),
+        ),
+      ]),
+    );
+
+    final editor = Expanded(
+      child: Container(
+        decoration: softCard(18, context.surface),
+        clipBehavior: Clip.antiAlias,
+        child: open == null
+            ? Center(child: Text('Pick a note to read or edit it here.', style: TextStyle(color: muted)))
+            : NoteEditor(key: ValueKey(open.id), id: open.id, onClose: () => setState(() => openId = null)),
+      ),
+    );
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [folders, const SizedBox(width: 16), notesList, const SizedBox(width: 16), editor]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<Store>();
     final prefs = context.watch<Prefs>();
+    if (isDesktop(context) && MediaQuery.sizeOf(context).width >= 1000) return _desktop(context, s);
     bool match(Note n) => (tag == null || n.tags.contains(tag)) && (q.isEmpty || n.title.toLowerCase().contains(q) || n.allText.toLowerCase().contains(q));
     final filtering = tag != null || q.isNotEmpty;
     final loose = s.notes.where((n) => match(n) && (filtering || n.sectionId == null || s.sections.every((x) => x.id != n.sectionId))).toList();

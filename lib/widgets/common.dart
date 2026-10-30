@@ -21,6 +21,17 @@ extension Ctx on BuildContext {
 /// Wide screens (computers, tablets) use the sidebar layout.
 bool isDesktop(BuildContext context) => MediaQuery.sizeOf(context).width >= 700;
 
+/// Card look from the web design: white, soft violet shadow, white edge.
+BoxDecoration softCard([double radius = 18, Color color = Colors.white]) => BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(color: Colors.white.withOpacity(0.8)),
+      boxShadow: const [
+        BoxShadow(color: Color(0x0D5A46C8), blurRadius: 2, offset: Offset(0, 1)),
+        BoxShadow(color: Color(0x177859DC), blurRadius: 30, offset: Offset(0, 10)),
+      ],
+    );
+
 final dShort = DateFormat('d MMM');
 final dLong = DateFormat('EEE, d MMM y');
 final dTime = DateFormat('d MMM, h:mm a');
@@ -143,12 +154,14 @@ class Box extends StatelessWidget {
   const Box({super.key, required this.child, this.padding = const EdgeInsets.all(16), this.color, this.onTap, this.radius = 22});
   @override
   Widget build(BuildContext context) {
-    final m = Material(
+    Widget m = Material(
       color: color ?? context.surface,
       borderRadius: BorderRadius.circular(radius),
       clipBehavior: Clip.antiAlias,
       child: InkWell(onTap: onTap, child: Padding(padding: padding, child: child)),
     );
+    // Computers (light): soft violet shadow + white edge, like the web design.
+    if (isDesktop(context) && !context.isDark) m = DecoratedBox(decoration: softCard(radius), child: m);
     return onTap == null ? m : Pressable(child: m);
   }
 }

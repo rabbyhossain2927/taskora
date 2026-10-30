@@ -39,11 +39,15 @@ class ShellState extends State<Shell> with WidgetsBindingObserver, SingleTickerP
   late final AnimationController fade = AnimationController(vsync: this, duration: const Duration(milliseconds: 360), value: 1);
   bool menuOpen = false;
 
+  /// Which sidebar page is open over the tabs on computers (null = a tab).
+  final side = ValueNotifier<String?>(null);
+
   static ShellState? of(BuildContext context) => context.findAncestorStateOfType<ShellState>();
   void go(int i) {
     final next = i.clamp(0, 3);
     if (next != tab) fade.forward(from: 0);
     if (_wide) contentNav.currentState?.popUntil((r) => r.isFirst);
+    side.value = null;
     setState(() {
       tab = next;
       menuOpen = false;
@@ -73,6 +77,7 @@ class ShellState extends State<Shell> with WidgetsBindingObserver, SingleTickerP
     WidgetsBinding.instance.removeObserver(this);
     fade.dispose();
     tabN.dispose();
+    side.dispose();
     super.dispose();
   }
 
@@ -111,7 +116,15 @@ class ShellState extends State<Shell> with WidgetsBindingObserver, SingleTickerP
 
   void _openFocus() {
     HapticFeedback.mediumImpact();
+    if (_wide) return openSide('focus', const FocusScreen());
     open(const FocusScreen());
+  }
+
+  /// Computers: a sidebar page replaces whatever is open in the content area.
+  void openSide(String key, Widget page) {
+    contentNav.currentState?.popUntil((r) => r.isFirst);
+    side.value = key;
+    open(page);
   }
 
   Widget _tabs() => ValueListenableBuilder<int>(
@@ -123,7 +136,7 @@ class ShellState extends State<Shell> with WidgetsBindingObserver, SingleTickerP
             return Opacity(opacity: 0.35 + 0.65 * v, child: Transform.translate(offset: Offset(0, (1 - v) * 14), child: child));
           },
           child: IndexedStack(index: t, children: [
-            for (final (w, max) in const [(HomeScreen(), 1480.0), (ProjectsScreen(), 1480.0), (TodosScreen(), 1000.0), (NotesScreen(), 1480.0)])
+            for (final (w, max) in const [(HomeScreen(), 1480.0), (ProjectsScreen(), 1480.0), (TodosScreen(), 1000.0), (NotesScreen(), double.infinity)])
               // Computers: keep each page at a comfortable width, centred.
               _wide ? Align(alignment: Alignment.topCenter, child: ConstrainedBox(constraints: BoxConstraints(maxWidth: max), child: w)) : w,
           ]),
@@ -159,16 +172,19 @@ class ShellState extends State<Shell> with WidgetsBindingObserver, SingleTickerP
         autofocus: true,
         child: Scaffold(
           body: Row(children: [
-            _Sidebar(
-              full: full,
-              tab: tab,
-              onTab: (i) {
-                _haptic();
-                go(i);
-              },
-              onAdd: _add,
-              onOpen: open,
-              onFocus: _openFocus,
+            ValueListenableBuilder<String?>(
+              valueListenable: side,
+              builder: (_, sd, __) => _Sidebar(
+                full: full,
+                tab: tab,
+                side: sd,
+                onTab: (i) {
+                  _haptic();
+                  go(i);
+                },
+                onSide: openSide,
+                onFocus: _openFocus,
+              ),
             ),
             Expanded(
               child: ClipRect(
@@ -176,6 +192,7 @@ class ShellState extends State<Shell> with WidgetsBindingObserver, SingleTickerP
                   onPop: () => contentNav.currentState?.maybePop(),
                   child: Navigator(
                     key: contentNav,
+                    observers: [_SideObserver(side)],
                     onGenerateRoute: (_) => PageRouteBuilder(pageBuilder: (_, __, ___) => _tabs(), transitionDuration: Duration.zero),
                   ),
                 ),
@@ -277,6 +294,16 @@ class ShellState extends State<Shell> with WidgetsBindingObserver, SingleTickerP
         ),
       ),
     );
+  }
+}
+
+/// Clears the sidebar highlight once you go back to the tabs.
+class _SideObserver extends NavigatorObserver {
+  final ValueNotifier<String?> side;
+  _SideObserver(this.side);
+  @override
+  void didPop(Route route, Route? previousRoute) {
+    if (previousRoute?.isFirst ?? false) side.value = null;
   }
 }
 
@@ -429,152 +456,110 @@ class _NavPill extends StatelessWidget {
   }
 }
 
-/// Sidebar for computers and tablets: same look as the phone nav pill.
+/// Sidebar for computers and tablets (web design): see-through white panel,
+/// each item has its own pastel icon tile, the open page is a white pill.
 class _Sidebar extends StatelessWidget {
   final bool full;
   final int tab;
+  final String? side;
   final ValueChanged<int> onTab;
-  final void Function(Widget page) onAdd;
-  final void Function(Widget page, {bool modal}) onOpen;
+  final void Function(String key, Widget page) onSide;
   final VoidCallback onFocus;
-  const _Sidebar({required this.full, required this.tab, required this.onTab, required this.onAdd, required this.onOpen, required this.onFocus});
+  const _Sidebar({required this.full, required this.tab, required this.side, required this.onTab, required this.onSide, required this.onFocus});
 
-  static const tabs = [
-    (Icons.home_outlined, Icons.home_rounded, 'Home', 'Alt+1'),
-    (Icons.work_outline_rounded, Icons.work_rounded, 'Projects', 'Alt+2'),
-    (Icons.check_circle_outline_rounded, Icons.check_circle_rounded, 'To-do', 'Alt+3'),
-    (Icons.sticky_note_2_outlined, Icons.sticky_note_2_rounded, 'Notes', 'Alt+4'),
-  ];
+  // key, label, icon, tile bg, icon colour
+  static const _home = ('home', 'Home', Icons.home_rounded, Color(0xFFE9E6FF), Color(0xFF5B4FE0));
+  static const _projects = ('projects', 'Projects', Icons.work_rounded, Color(0xFFFFE6F1), Color(0xFFC2306F));
+  static const _todo = ('todo', 'To-do', Icons.check_circle_rounded, Color(0xFFDDF5E8), Color(0xFF1E7A50));
+  static const _notes = ('notes', 'Notes', Icons.sticky_note_2_rounded, Color(0xFFFFF2D6), Color(0xFFA5650A));
+  static const _stats = ('stats', 'Stats', Icons.insights_rounded, Color(0xFFE1EEFF), Color(0xFF2F5FD0));
+  static const _cal = ('calendar', 'Calendar', Icons.calendar_month_rounded, Color(0xFFFFE6DE), Color(0xFFB8462E));
+  static const _focus = ('focus', 'Focus', Icons.timer_rounded, Color(0xFFF2E4FF), Color(0xFF8236C9));
+  static const _inbox = ('inbox', 'Notifications', Icons.notifications_rounded, Color(0xFFDDF4F7), Color(0xFF0B7A86));
+  static const _bin = ('bin', 'Archive & Trash', Icons.inventory_2_rounded, Color(0xFFEEEEF3), Color(0xFF55556A));
 
   @override
   Widget build(BuildContext context) {
     final s = context.watch<Store>();
     final f = context.watch<FocusService>();
     final dark = context.isDark;
-    final a = context.accent;
     final u = FirebaseAuth.instance.currentUser;
+    final now = DateTime.now();
+    final endToday = DateTime(now.year, now.month, now.day + 1);
+    final due = s.todos.where((t) => !t.done && t.deadline != null && t.deadline!.isBefore(endToday)).length;
+    final active = s.projects.where((p) => !p.done).length;
     final w = full ? 236.0 : 78.0;
+    final cur = side ?? const ['home', 'projects', 'todo', 'notes'][tab];
+
+    Widget item((String, String, IconData, Color, Color) d, VoidCallback onTap, {String badge = '', bool alert = false, String? hint}) =>
+        _Item(full: full, data: d, selected: cur == d.$1, badge: badge, alert: alert, hint: hint, onTap: onTap);
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeOutCubic,
       width: w,
-      margin: const EdgeInsets.fromLTRB(12, 12, 0, 12),
       decoration: BoxDecoration(
-        color: dark ? const Color(0xFF1E1E27) : Colors.white,
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: dark ? Colors.white10 : const Color(0xFFEDEDF3)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(dark ? 0.35 : 0.06), blurRadius: 24, offset: const Offset(0, 10)),
-          BoxShadow(color: a.withOpacity(0.06), blurRadius: 30, offset: const Offset(0, 6)),
-        ],
+        color: dark ? const Color(0xFF1B1B23) : Colors.white.withOpacity(0.72),
+        border: Border(right: BorderSide(color: dark ? Colors.white10 : Colors.white.withOpacity(0.9))),
+        boxShadow: dark ? null : const [BoxShadow(color: Color(0x0F7859DC), blurRadius: 30, offset: Offset(4, 0))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Padding(
-          padding: EdgeInsets.fromLTRB(full ? 18 : 0, 18, full ? 18 : 0, 14),
+          padding: EdgeInsets.fromLTRB(full ? 20 : 0, 20, full ? 20 : 0, 16),
           child: Row(mainAxisAlignment: full ? MainAxisAlignment.start : MainAxisAlignment.center, children: [
-            const Logo(size: 36),
+            const Logo(size: 34),
             if (full) ...[
               const SizedBox(width: 10),
-              const Text('TaskOra', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.4)),
+              const Text.rich(TextSpan(children: [TextSpan(text: 'Task'), TextSpan(text: 'Ora', style: TextStyle(color: Color(0xFF7054FB)))]),
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
             ],
           ]),
         ),
-        // + New
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: full ? 14 : 12),
-          child: PopupMenuButton<int>(
-            tooltip: 'New project, to-do or note',
-            offset: const Offset(0, 56),
-            onSelected: (v) {
-              if (v == 0) onAdd(const ProjectEditor());
-              if (v == 1) onAdd(const TodoEditor());
-              if (v == 2) onAdd(const NoteEditor());
-              if (v == 3) onFocus();
-            },
-            itemBuilder: (_) => [
-              _menu(0, Icons.work_outline_rounded, 'Project', 'Alt+P', 0),
-              _menu(1, Icons.check_circle_outline_rounded, 'To-do', 'Alt+T', 8),
-              _menu(2, Icons.sticky_note_2_outlined, 'Note', 'Alt+N', 6),
-              const PopupMenuDivider(),
-              _menu(3, Icons.timer_outlined, 'Start focus', 'Alt+F', 12),
-            ],
-            child: Container(
-              height: 50,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(25),
-                gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color.lerp(a, Colors.white, 0.18)!, a]),
-                boxShadow: [BoxShadow(color: a.withOpacity(0.32), blurRadius: 16, offset: const Offset(0, 6))],
-              ),
-              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                const Icon(Icons.add_rounded, color: Colors.white, size: 26),
-                if (full) ...[
-                  const SizedBox(width: 6),
-                  const Text('New', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
-                ],
-              ]),
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-        for (var i = 0; i < tabs.length; i++)
-          _Item(full: full, icon: i == tab ? tabs[i].$2 : tabs[i].$1, label: tabs[i].$3, hint: tabs[i].$4, selected: i == tab, onTap: () => onTab(i)),
-        Padding(padding: EdgeInsets.symmetric(horizontal: full ? 20 : 16, vertical: 10), child: const Divider()),
         Expanded(
           child: ListView(padding: EdgeInsets.zero, children: [
-            _Item(full: full, icon: Icons.insights_rounded, label: 'Stats', onTap: () => onOpen(const StatsScreen())),
-            _Item(full: full, icon: Icons.calendar_month_outlined, label: 'Calendar', onTap: () => onOpen(const CalendarScreen())),
-            _Item(
-              full: full,
-              icon: f.active ? Icons.timer_rounded : Icons.timer_outlined,
-              label: f.active ? 'Focus · ${FocusEngine.fmt(f.leftMs)}' : 'Focus',
-              hint: 'Alt+F',
-              onTap: onFocus,
-            ),
-            _Item(full: full, icon: Icons.notifications_none_rounded, label: 'Notifications', badge: s.unreadCount, onTap: () => onOpen(const NotificationsScreen())),
-            _Item(full: full, icon: Icons.search_rounded, label: 'Search', hint: 'Ctrl+K', onTap: () => onOpen(const SearchScreen())),
-            _Item(full: full, icon: Icons.archive_outlined, label: 'Archive', onTap: () => onOpen(const BinScreen(trash: false))),
-            _Item(full: full, icon: Icons.delete_outline_rounded, label: 'Trash', onTap: () => onOpen(const BinScreen(trash: true))),
+            item(_home, () => onTab(0), hint: 'Alt+1'),
+            item(_projects, () => onTab(1), badge: active > 0 ? '$active' : '', hint: 'Alt+2'),
+            item(_todo, () => onTab(2), badge: due > 0 ? '$due' : '', alert: true, hint: 'Alt+3'),
+            item(_notes, () => onTab(3), hint: 'Alt+4'),
+            Padding(padding: EdgeInsets.symmetric(horizontal: full ? 20 : 16, vertical: 10), child: const Divider()),
+            item(_stats, () => onSide('stats', const StatsScreen())),
+            item(_cal, () => onSide('calendar', const CalendarScreen())),
+            item(_focus, onFocus, badge: f.active ? FocusEngine.fmt(f.leftMs) : '', hint: 'Alt+F'),
+            item(_inbox, () => onSide('inbox', const NotificationsScreen()), badge: s.unreadCount > 0 ? '${s.unreadCount}' : ''),
+            item(_bin, () => onSide('bin', const BinScreen(trash: false))),
           ]),
         ),
-        // Profile
+        // Profile -> Account
         Padding(
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(12),
           child: Material(
-            color: dark ? Colors.white.withOpacity(0.05) : const Color(0xFFF6F6FA),
-            borderRadius: BorderRadius.circular(18),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(18),
-              onTap: () => onOpen(const ProfileScreen()),
-              child: Padding(
-                padding: EdgeInsets.all(full ? 10 : 8),
-                child: Row(mainAxisAlignment: full ? MainAxisAlignment.start : MainAxisAlignment.center, children: [
-                  Stack(children: [
-                    const Avatar(size: 36, ring: false),
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        width: 11,
-                        height: 11,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: s.syncError != null ? C.red : (s.hasPendingWrites ? const Color(0xFFD48806) : C.green),
-                          border: Border.all(color: dark ? const Color(0xFF1E1E27) : Colors.white, width: 2),
-                        ),
+            color: Colors.transparent,
+            child: Ink(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                color: dark ? Colors.white.withOpacity(0.05) : null,
+                gradient: dark ? null : const LinearGradient(colors: [Color(0xFFFCE9FF), Color(0xFFE6F1FF)]),
+                border: side == 'account' ? Border.all(color: const Color(0xFF7054FB), width: 1.5) : null,
+              ),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => onSide('account', const ProfileScreen()),
+                child: Padding(
+                  padding: EdgeInsets.all(full ? 10 : 8),
+                  child: Row(mainAxisAlignment: full ? MainAxisAlignment.start : MainAxisAlignment.center, children: [
+                    const Avatar(size: 34, ring: false),
+                    if (full) ...[
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(u?.displayName ?? 'You', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                          Text(s.syncError != null ? 'Offline' : (s.syncing ? 'Syncing…' : 'Synced'),
+                              style: TextStyle(fontSize: 11.5, color: s.syncError != null ? C.red : const Color(0xFF1E7A50))),
+                        ]),
                       ),
-                    ),
+                    ],
                   ]),
-                  if (full) ...[
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(u?.displayName ?? 'You', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
-                        Text(s.syncError != null ? 'Offline' : (s.syncing ? 'Syncing…' : 'Synced'), style: TextStyle(fontSize: 11.5, color: context.mutedText)),
-                      ]),
-                    ),
-                    Icon(Icons.settings_outlined, size: 18, color: context.mutedText),
-                  ],
-                ]),
+                ),
               ),
             ),
           ),
@@ -582,32 +567,17 @@ class _Sidebar extends StatelessWidget {
       ]),
     );
   }
-
-  PopupMenuItem<int> _menu(int v, IconData icon, String label, String hint, int color) {
-    final p = pastel(color);
-    return PopupMenuItem(
-      value: v,
-      child: Builder(
-        builder: (context) => Row(children: [
-          Container(width: 32, height: 32, decoration: BoxDecoration(color: p.bg, borderRadius: BorderRadius.circular(10)), child: Icon(icon, size: 17, color: p.fg)),
-          const SizedBox(width: 12),
-          Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600))),
-          Text(hint, style: TextStyle(fontSize: 11.5, color: context.mutedText)),
-        ]),
-      ),
-    );
-  }
 }
 
 class _Item extends StatefulWidget {
   final bool full;
-  final IconData icon;
-  final String label;
-  final String? hint;
+  final (String, String, IconData, Color, Color) data;
   final bool selected;
-  final int badge;
+  final String badge;
+  final bool alert;
+  final String? hint;
   final VoidCallback onTap;
-  const _Item({required this.full, required this.icon, required this.label, this.hint, this.selected = false, this.badge = 0, required this.onTap});
+  const _Item({required this.full, required this.data, required this.selected, this.badge = '', this.alert = false, this.hint, required this.onTap});
   @override
   State<_Item> createState() => _ItemState();
 }
@@ -616,15 +586,29 @@ class _ItemState extends State<_Item> {
   bool hover = false;
   @override
   Widget build(BuildContext context) {
-    final a = context.accent;
+    final d = widget.data;
     final sel = widget.selected;
-    final idle = context.isDark ? const Color(0xFFA0A0B0) : const Color(0xFF6E6E7C);
-    final icon = Badge(
-      isLabelVisible: widget.badge > 0,
-      label: Text('${widget.badge}'),
-      backgroundColor: C.red,
-      child: Icon(widget.icon, size: 22, color: sel ? Colors.white : (hover ? a : idle)),
+    final dark = context.isDark;
+    final tile = AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      width: 30,
+      height: 30,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        color: sel ? null : (dark ? d.$5.withOpacity(0.18) : d.$4),
+        gradient: sel ? LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [d.$5, d.$5.withOpacity(0.8)]) : null,
+      ),
+      child: Icon(d.$3, size: 17, color: sel ? Colors.white : (dark ? Color.lerp(d.$5, Colors.white, 0.4) : d.$5)),
     );
+    final badge = widget.badge.isEmpty
+        ? null
+        : widget.alert && !sel
+            ? Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(color: C.redBg, borderRadius: BorderRadius.circular(99)),
+                child: Text(widget.badge, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFFB42318))),
+              )
+            : Text(widget.badge, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF4A4ED6)));
     final item = MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => hover = true),
@@ -632,33 +616,32 @@ class _ItemState extends State<_Item> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
+          duration: const Duration(milliseconds: 200),
           curve: Curves.easeOutCubic,
-          height: 46,
+          height: 42,
           margin: EdgeInsets.symmetric(horizontal: widget.full ? 12 : 14, vertical: 2),
-          padding: EdgeInsets.symmetric(horizontal: widget.full ? 14 : 0),
+          padding: EdgeInsets.symmetric(horizontal: widget.full ? 8 : 0),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(23),
-            gradient: sel ? LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color.lerp(a, Colors.white, 0.14)!, a]) : null,
-            color: sel ? null : (hover ? a.withOpacity(context.isDark ? 0.14 : 0.08) : Colors.transparent),
-            boxShadow: sel ? [BoxShadow(color: a.withOpacity(0.30), blurRadius: 12, offset: const Offset(0, 4))] : null,
+            borderRadius: BorderRadius.circular(14),
+            color: sel ? (dark ? Colors.white.withOpacity(0.08) : Colors.white) : (hover ? (dark ? Colors.white10 : Colors.white.withOpacity(0.6)) : Colors.transparent),
+            boxShadow: sel && !dark ? const [BoxShadow(color: Color(0x247859DC), blurRadius: 18, offset: Offset(0, 6))] : null,
           ),
           child: Row(mainAxisAlignment: widget.full ? MainAxisAlignment.start : MainAxisAlignment.center, children: [
-            icon,
+            widget.full || badge == null ? tile : Badge(label: Text(widget.badge), backgroundColor: C.red, child: tile),
             if (widget.full) ...[
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
-                child: Text(widget.label,
+                child: Text(d.$2,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontWeight: sel ? FontWeight.w700 : FontWeight.w500, fontSize: 14, color: sel ? Colors.white : (hover ? a : null))),
+                    style: TextStyle(fontWeight: sel ? FontWeight.w700 : FontWeight.w500, fontSize: 14, color: sel ? null : (dark ? null : const Color(0xFF4B4B5A)))),
               ),
-              if (widget.hint != null && hover && !sel) Text(widget.hint!, style: TextStyle(fontSize: 11, color: context.mutedText)),
+              if (badge != null) badge else if (widget.hint != null && hover && !sel) Text(widget.hint!, style: TextStyle(fontSize: 11, color: context.mutedText)),
             ],
           ]),
         ),
       ),
     );
-    return widget.full ? item : Tooltip(message: widget.hint == null ? widget.label : '${widget.label} (${widget.hint})', child: item);
+    return widget.full ? item : Tooltip(message: widget.hint == null ? d.$2 : '${d.$2} (${widget.hint})', child: item);
   }
 }

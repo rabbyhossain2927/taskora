@@ -276,6 +276,21 @@ class AppBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     final base = dark ? const Color(0xFF111117) : C.bg;
     final wide = constrain && MediaQuery.sizeOf(context).width >= 1000;
+    // Computers, light, "Soft glow": the pastel pink / blue / mint wash from the web design.
+    if (!dark && style == 'glow' && MediaQuery.sizeOf(context).width >= 700) {
+      final inner = wide ? Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 980), child: child)) : child;
+      RadialGradient g(Alignment at, double r, Color c, double stop) => RadialGradient(center: at, radius: r, colors: [c, c.withOpacity(0)], stops: [0, stop]);
+      return DecoratedBox(
+        decoration: const BoxDecoration(color: Color(0xFFF8F7FF)),
+        child: DecoratedBox(
+          decoration: BoxDecoration(gradient: g(Alignment.topLeft, 1.3, const Color(0xFFFCE9FF), 0.62)),
+          child: DecoratedBox(
+            decoration: BoxDecoration(gradient: g(Alignment.topRight, 1.1, const Color(0xFFDFF0FF), 0.58)),
+            child: DecoratedBox(decoration: BoxDecoration(gradient: g(const Alignment(0.4, 1), 1.2, const Color(0xFFE2FBEF), 0.6)), child: inner),
+          ),
+        ),
+      );
+    }
     return DecoratedBox(
       decoration: BoxDecoration(color: base),
       child: CustomPaint(

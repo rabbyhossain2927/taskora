@@ -24,7 +24,10 @@ import '../widgets/rich_note.dart';
 class NoteEditor extends StatefulWidget {
   final String? id;
   final String? sectionId;
-  const NoteEditor({super.key, this.id, this.sectionId});
+
+  /// Set when the editor sits inside the Notes page on computers (no back button).
+  final VoidCallback? onClose;
+  const NoteEditor({super.key, this.id, this.sectionId, this.onClose});
   @override
   State<NoteEditor> createState() => _NoteEditorState();
 }
@@ -82,6 +85,8 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    // Inside the Notes page there is no "back", so save when switching notes.
+    if (widget.onClose != null) _save(final_: true);
     WidgetsBinding.instance.removeObserver(this);
     _debounce?.cancel();
     for (final s in _subs) {
@@ -478,7 +483,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
           },
           child: SafeArea(
             child: Column(children: [
-              Header('', actions: [
+              Header('', back: widget.onClose == null, actions: [
                 RoundButton(
                     icon: n.pinned ? Icons.push_pin : Icons.push_pin_outlined,
                     tooltip: n.pinned ? 'Unpin' : 'Pin',
@@ -494,7 +499,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                     onTap: () async {
                       deleted = true;
                       final m = ScaffoldMessenger.of(context);
-                      Navigator.pop(context);
+                      widget.onClose == null ? Navigator.pop(context) : widget.onClose!();
                       final undo = await store.deleteDocs('notes', [n.id]);
                       m.showSnackBar(SnackBar(content: const Text('Note moved to Trash'), duration: const Duration(seconds: 5), action: SnackBarAction(label: 'Undo', onPressed: () => undo())));
                     },
