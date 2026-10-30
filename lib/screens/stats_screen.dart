@@ -179,11 +179,11 @@ class _StatsScreenState extends State<StatsScreen> {
                       if (i > 0) SizedBox(width: counts.length > 14 ? 4 : 14),
                       Expanded(
                         child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-                          Text('${counts[i]}', style: TextStyle(fontSize: 12, color: i == counts.length - 1 ? deskLink : muted, fontWeight: i == counts.length - 1 ? FontWeight.w700 : FontWeight.w400)),
+                          Text('${counts[i]}', style: TextStyle(fontSize: 12, color: i == counts.length - 1 ? context.selInk : muted, fontWeight: i == counts.length - 1 ? FontWeight.w700 : FontWeight.w400)),
                           const SizedBox(height: 6),
                           Container(height: 8 + 170.0 * counts[i] / maxC, decoration: BoxDecoration(color: i == counts.length - 1 ? a : const Color(0xFFDCDDFD), borderRadius: BorderRadius.circular(8))),
                           const SizedBox(height: 6),
-                          Text(labels[i], maxLines: 1, style: TextStyle(fontSize: 12, color: i == counts.length - 1 ? deskLink : muted, fontWeight: i == counts.length - 1 ? FontWeight.w700 : FontWeight.w400)),
+                          Text(labels[i], maxLines: 1, style: TextStyle(fontSize: 12, color: i == counts.length - 1 ? context.selInk : muted, fontWeight: i == counts.length - 1 ? FontWeight.w700 : FontWeight.w400)),
                         ]),
                       ),
                     ],

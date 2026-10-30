@@ -139,10 +139,10 @@ class _BinScreenState extends State<BinScreen> {
           child: Column(children: [
             if (chosen.isNotEmpty)
               Container(
-                color: context.isDark ? Colors.white10 : const Color(0xFFEEEEFD),
+                color: context.isDark ? Colors.white10 : context.selTint,
                 padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                 child: Row(children: [
-                  Text('${chosen.length} selected', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: Color(0xFF3B2E8F))),
+                  Text('${chosen.length} selected', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: context.selInk)),
                   const Spacer(),
                   DeskBtn(trash ? 'Restore' : 'Unarchive', kind: 'white', height: 34, onTap: () => _restore(s, chosen)),
                   const SizedBox(width: 8),

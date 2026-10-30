@@ -16,6 +16,12 @@ extension Ctx on BuildContext {
   bool get isDark => Theme.of(this).brightness == Brightness.dark;
   Color get mutedText => isDark ? const Color(0xFFA3A3B2) : C.muted;
   Store get store => read<Store>();
+
+  /// Hover wash, selected background and selected text — all from the theme colour.
+  Color get hoverTint => accent.withOpacity(isDark ? 0.10 : 0.07);
+  Color get selTint => accent.withOpacity(isDark ? 0.20 : 0.13);
+  Color get selInk => isDark ? Color.lerp(accent, Colors.white, 0.35)! : Color.lerp(accent, Colors.black, 0.28)!;
+  Color get softFill => isDark ? Colors.white.withOpacity(0.07) : accent.withOpacity(0.08);
 }
 
 /// Wide screens (computers, tablets) use the sidebar layout.

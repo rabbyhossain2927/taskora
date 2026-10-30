@@ -103,7 +103,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                       child: Container(
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
-                                          color: isSel ? (context.isDark ? Colors.white10 : const Color(0xFFF6F5FF)) : null,
+                                          color: isSel ? (context.isDark ? Colors.white10 : context.hoverTint) : null,
                                           border: const Border(top: BorderSide(color: deskLine), left: BorderSide(color: deskLine)),
                                         ),
                                         child: d == null

@@ -608,7 +608,7 @@ class _ItemState extends State<_Item> {
                 decoration: BoxDecoration(color: C.redBg, borderRadius: BorderRadius.circular(99)),
                 child: Text(widget.badge, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFFB42318))),
               )
-            : Text(widget.badge, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF4A4ED6)));
+            : Text(widget.badge, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: context.selInk));
     final item = MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => hover = true),
@@ -623,8 +623,8 @@ class _ItemState extends State<_Item> {
           padding: EdgeInsets.symmetric(horizontal: widget.full ? 8 : 0),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            color: sel ? (dark ? Colors.white.withOpacity(0.08) : Colors.white) : (hover ? (dark ? Colors.white.withOpacity(0.06) : const Color(0xFFF1EFFF)) : Colors.transparent),
-            boxShadow: sel && !dark ? const [BoxShadow(color: Color(0x247859DC), blurRadius: 18, offset: Offset(0, 6))] : null,
+            color: sel ? context.selTint : (hover ? context.hoverTint : Colors.transparent),
+            
           ),
           child: Row(mainAxisAlignment: widget.full ? MainAxisAlignment.start : MainAxisAlignment.center, children: [
             widget.full || badge == null ? tile : Badge(label: Text(widget.badge), backgroundColor: C.red, child: tile),
@@ -634,7 +634,7 @@ class _ItemState extends State<_Item> {
                 child: Text(d.$2,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontWeight: sel ? FontWeight.w700 : FontWeight.w500, fontSize: 14, color: sel ? null : (dark ? null : const Color(0xFF4B4B5A)))),
+                    style: TextStyle(fontWeight: sel ? FontWeight.w700 : FontWeight.w500, fontSize: 14, color: sel ? context.selInk : (dark ? null : const Color(0xFF4B4B5A)))),
               ),
               if (badge != null) badge,
             ],

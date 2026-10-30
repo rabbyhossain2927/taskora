@@ -715,7 +715,7 @@ class _DeskProjectRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(border: last ? null : Border(bottom: BorderSide(color: context.isDark ? Colors.white.withOpacity(0.05) : deskLine))),
         child: Row(children: [
-          SizedBox(width: 64, height: 64, child: _DeskCover(p, radius: 12, iconSize: 24)),
+          SizedBox(width: 96, height: 96, child: _DeskCover(p, radius: 14, iconSize: 32)),
           const SizedBox(width: 14),
           Expanded(
             flex: 4,

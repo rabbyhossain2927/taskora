@@ -231,7 +231,7 @@ class _DesktopAccountState extends State<_DesktopAccount> {
       'primary' => (context.accent, Colors.white),
       'danger' => (_dark ? const Color(0x33B42318) : C.redBg, _dark ? const Color(0xFFFF8A80) : const Color(0xFFB42318)),
       'ink' => (_dark ? Colors.white : C.ink, _dark ? C.ink : Colors.white),
-      _ => (_dark ? Colors.white.withOpacity(0.07) : const Color(0xFFF1F0FA), _dark ? Colors.white : const Color(0xFF3B2E8F)),
+      _ => (_dark ? Colors.white.withOpacity(0.07) : context.softFill, _dark ? Colors.white : context.selInk),
     };
     return Material(
       color: bg,
@@ -272,9 +272,9 @@ class _DesktopAccountState extends State<_DesktopAccount> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(11),
-                      color: page == p.$1 ? (_dark ? Colors.white.withOpacity(0.07) : const Color(0xFFF1EFFF)) : null,
+                      color: page == p.$1 ? (_dark ? Colors.white.withOpacity(0.07) : context.selTint) : null,
                     ),
-                    child: Text(p.$2, style: TextStyle(fontSize: 13.5, fontWeight: page == p.$1 ? FontWeight.w700 : FontWeight.w500, color: page == p.$1 ? (_dark ? Colors.white : const Color(0xFF3B2E8F)) : null)),
+                    child: Text(p.$2, style: TextStyle(fontSize: 13.5, fontWeight: page == p.$1 ? FontWeight.w700 : FontWeight.w500, color: page == p.$1 ? (_dark ? Colors.white : context.selInk) : null)),
                   ),
                 ),
               ),
@@ -293,7 +293,7 @@ class _DesktopAccountState extends State<_DesktopAccount> {
       for (final m in const [('light', 'Light', Icons.light_mode_outlined), ('dark', 'Dark', Icons.dark_mode_outlined), ('system', 'Match device', Icons.contrast_rounded)]) ...[
         Expanded(
           child: Material(
-            color: p.themeMode == m.$1 ? (_dark ? Colors.white.withOpacity(0.09) : const Color(0xFFF1EFFF)) : (_dark ? Colors.white.withOpacity(0.03) : const Color(0xFFF8F7FC)),
+            color: p.themeMode == m.$1 ? (_dark ? Colors.white.withOpacity(0.09) : context.selTint) : (_dark ? Colors.white.withOpacity(0.03) : Color(0xFFF8F7FC)),
             borderRadius: BorderRadius.circular(12),
             child: InkWell(
               borderRadius: BorderRadius.circular(12),
@@ -301,9 +301,9 @@ class _DesktopAccountState extends State<_DesktopAccount> {
               child: SizedBox(
                 height: 44,
                 child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(m.$3, size: 18, color: p.themeMode == m.$1 ? (_dark ? Colors.white : const Color(0xFF3B2E8F)) : muted),
+                  Icon(m.$3, size: 18, color: p.themeMode == m.$1 ? (_dark ? Colors.white : context.selInk) : muted),
                   const SizedBox(width: 8),
-                  Text(m.$2, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: p.themeMode == m.$1 ? (_dark ? Colors.white : const Color(0xFF3B2E8F)) : muted)),
+                  Text(m.$2, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: p.themeMode == m.$1 ? (_dark ? Colors.white : context.selInk) : muted)),
                 ]),
               ),
             ),
@@ -601,7 +601,7 @@ class _DesktopAccountState extends State<_DesktopAccount> {
             child: NoBack(
               child: Navigator(
                 key: ValueKey(page),
-                onGenerateRoute: (_) => PageRouteBuilder(pageBuilder: (_, __, ___) => Align(alignment: Alignment.topLeft, child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 860), child: sel.$3!)), transitionDuration: Duration.zero),
+                onGenerateRoute: (_) => PageRouteBuilder(pageBuilder: (_, __, ___) => sel.$3!, transitionDuration: Duration.zero),
               ),
             ),
           ),

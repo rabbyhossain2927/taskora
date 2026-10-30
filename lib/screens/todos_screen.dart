@@ -275,7 +275,7 @@ class _TodosScreenState extends State<TodosScreen> {
       final doneToday = list.where((t) => t.done && t.completedAt != null && !t.completedAt!.isBefore(today)).toList();
       final sections = <(String, Color, List<Todo>)>[
         if (show == 'all' || show == 'today') ('Overdue', const Color(0xFFB42318), groups['Overdue']!),
-        if (show == 'all' || show == 'today') ('Today', deskLink, groups['Today']!),
+        if (show == 'all' || show == 'today') ('Today', context.selInk, groups['Today']!),
         if (show == 'all' || show == 'upcoming') ('Upcoming', const Color(0xFF4B4B5A), groups['Upcoming']!),
         if (show == 'all') ('No date', const Color(0xFF4B4B5A), groups['No date']!),
         if (show == 'all') ('Done today', const Color(0xFF4B4B5A), doneToday),
@@ -317,7 +317,7 @@ class _TodosScreenState extends State<TodosScreen> {
                       ),
                     ),
                   ),
-                  deskChip('Enter', const Color(0xFFF1F0FA), muted),
+                  deskChip('Enter', context.softFill, muted),
                 ]),
               ),
               const SizedBox(height: 14),
@@ -359,7 +359,7 @@ class _TodosScreenState extends State<TodosScreen> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(c.label,
-                              style: TextStyle(fontSize: 13.5, fontWeight: (cat ?? 'all') == c.key ? FontWeight.w700 : FontWeight.w500, color: (cat ?? 'all') == c.key ? deskLink : null)),
+                              style: TextStyle(fontSize: 13.5, fontWeight: (cat ?? 'all') == c.key ? FontWeight.w700 : FontWeight.w500, color: (cat ?? 'all') == c.key ? context.selInk : null)),
                         ),
                         Text('${s.todos.where((t) => !t.done && (c.key == 'all' || t.category == c.key)).length}', style: TextStyle(fontSize: 12.5, color: muted)),
                       ]),

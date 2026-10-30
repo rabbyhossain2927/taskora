@@ -241,12 +241,12 @@ class _NotesScreenState extends State<NotesScreen> {
         child: Container(
           height: 38,
           padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(color: on ? (context.isDark ? Colors.white10 : const Color(0xFFEEEEFD)) : null, borderRadius: BorderRadius.circular(11)),
+          decoration: BoxDecoration(color: on ? (context.isDark ? Colors.white10 : context.selTint) : null, borderRadius: BorderRadius.circular(11)),
           child: Row(children: [
             Icon(icon, size: 18, color: on ? context.accent : c),
             const SizedBox(width: 10),
-            Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5, fontWeight: on ? FontWeight.w700 : FontWeight.w500, color: on ? const Color(0xFF4A4ED6) : null))),
-            Text('$count', style: TextStyle(fontSize: 12, color: on ? const Color(0xFF4A4ED6) : muted)),
+            Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13.5, fontWeight: on ? FontWeight.w700 : FontWeight.w500, color: on ? context.selInk : null))),
+            Text('$count', style: TextStyle(fontSize: 12, color: on ? context.selInk : muted)),
           ]),
         ),
       );
@@ -255,7 +255,7 @@ class _NotesScreenState extends State<NotesScreen> {
     Widget tb(IconData ic, String tip, VoidCallback onTap, {bool main = false}) => Tooltip(
           message: tip,
           child: Material(
-            color: main ? context.accent : (context.isDark ? Colors.white10 : const Color(0xFFF4F3FB)),
+            color: main ? context.accent : (context.isDark ? Colors.white10 : context.softFill),
             borderRadius: BorderRadius.circular(10),
             child: InkWell(borderRadius: BorderRadius.circular(10), onTap: onTap, child: SizedBox(width: 34, height: 34, child: Icon(ic, size: 18, color: main ? Colors.white : const Color(0xFF4B4B5A)))),
           ),
@@ -331,7 +331,7 @@ class _NotesScreenState extends State<NotesScreen> {
           height: 38,
           margin: const EdgeInsets.fromLTRB(4, 0, 4, 6),
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(color: context.isDark ? Colors.white10 : const Color(0xFFF4F3FB), borderRadius: BorderRadius.circular(11)),
+          decoration: BoxDecoration(color: context.isDark ? Colors.white10 : context.softFill, borderRadius: BorderRadius.circular(11)),
           child: Row(children: [
             Icon(Icons.search_rounded, size: 17, color: muted),
             const SizedBox(width: 8),
@@ -357,7 +357,7 @@ class _NotesScreenState extends State<NotesScreen> {
                       child: Container(
                         padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                         margin: const EdgeInsets.only(bottom: 2),
-                        decoration: BoxDecoration(color: n.id == open?.id ? (context.isDark ? Colors.white10 : const Color(0xFFF1EFFF)) : null, borderRadius: BorderRadius.circular(12)),
+                        decoration: BoxDecoration(color: n.id == open?.id ? (context.isDark ? Colors.white10 : context.selTint) : null, borderRadius: BorderRadius.circular(12)),
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Row(children: [
                             Container(width: 10, height: 10, decoration: BoxDecoration(color: n.color == 0 ? const Color(0xFFCDBEFF) : Color.lerp(noteColor(n.color), Colors.black, 0.1), borderRadius: BorderRadius.circular(3))),

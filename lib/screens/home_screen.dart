@@ -582,7 +582,7 @@ class _DesktopHome extends StatelessWidget {
             link: 'Open to-do',
             onLink: () => ShellState.of(context)?.go(2)),
         if (overdue.isNotEmpty) ...[group('Overdue', const Color(0xFFB42318)), for (final t in overdue.take(4)) TodoRow(todo: t)],
-        if (todayList.isNotEmpty) ...[group('Today', const Color(0xFF4A4ED6)), for (final t in todayList.take(8)) TodoRow(todo: t)],
+        if (todayList.isNotEmpty) ...[group('Today', context.selInk), for (final t in todayList.take(8)) TodoRow(todo: t)],
         if (doneTodayList.isNotEmpty) ...[group('Done', muted), for (final t in doneTodayList.take(3)) TodoRow(todo: t)],
         if (dueToday.isEmpty && doneTodayList.isEmpty) Padding(padding: const EdgeInsets.all(14), child: Text('Nothing due today. Enjoy the calm.', style: TextStyle(color: muted))),
         const SizedBox(height: 6),
@@ -605,8 +605,8 @@ class _DesktopHome extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.center, children: [
-                    if (ic != null) ...[Icon(ic, size: 18, color: main ? Colors.white : const Color(0xFF3B2E8F)), const SizedBox(width: 6)],
-                    Text(t, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: main ? Colors.white : const Color(0xFF3B2E8F))),
+                    if (ic != null) ...[Icon(ic, size: 18, color: main ? Colors.white : context.selInk), SizedBox(width: 6)],
+                    Text(t, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: main ? Colors.white : context.selInk)),
                   ]),
                 ),
               ),
@@ -622,7 +622,7 @@ class _DesktopHome extends StatelessWidget {
         child: Row(children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Focus', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF3B2E8F))),
+              Text('Focus', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: context.selInk)),
               const SizedBox(height: 2),
               Text(f.label.isEmpty ? state : '$state · ${f.label}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, color: Color(0xFF4F4596))),
               const SizedBox(height: 10),
@@ -664,11 +664,11 @@ class _DesktopHome extends StatelessWidget {
               if (k > 0) const SizedBox(width: 10),
               Expanded(
                 child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-                  Text('${perDay[k]}', style: TextStyle(fontSize: 11, color: k == 6 ? const Color(0xFF4A4ED6) : muted, fontWeight: k == 6 ? FontWeight.w700 : FontWeight.w400)),
+                  Text('${perDay[k]}', style: TextStyle(fontSize: 11, color: k == 6 ? context.selInk : muted, fontWeight: k == 6 ? FontWeight.w700 : FontWeight.w400)),
                   const SizedBox(height: 6),
                   Container(height: 8 + 70.0 * perDay[k] / maxV, decoration: BoxDecoration(color: k == 6 ? context.accent : const Color(0xFFDCDDFD), borderRadius: BorderRadius.circular(6))),
                   const SizedBox(height: 6),
-                  Text(DateFormat('E').format(days[k]).substring(0, 2), style: TextStyle(fontSize: 11.5, color: k == 6 ? const Color(0xFF4A4ED6) : muted, fontWeight: k == 6 ? FontWeight.w700 : FontWeight.w400)),
+                  Text(DateFormat('E').format(days[k]).substring(0, 2), style: TextStyle(fontSize: 11.5, color: k == 6 ? context.selInk : muted, fontWeight: k == 6 ? FontWeight.w700 : FontWeight.w400)),
                 ]),
               ),
             ],
@@ -791,7 +791,7 @@ class _Link extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MouseRegion(
         cursor: SystemMouseCursors.click,
-        child: GestureDetector(onTap: onTap, child: Text(text, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF4A4ED6)))),
+        child: GestureDetector(onTap: onTap, child: Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.selInk))),
       );
 }
 
@@ -824,7 +824,7 @@ class _HoverRowState extends State<_HoverRow> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-            decoration: BoxDecoration(color: h ? (context.isDark ? Colors.white10 : const Color(0xFFF6F5FF)) : Colors.transparent, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: h ? (context.isDark ? Colors.white10 : context.hoverTint) : Colors.transparent, borderRadius: BorderRadius.circular(12)),
             child: widget.child,
           ),
         ),
@@ -851,7 +851,7 @@ class _SearchField extends StatelessWidget {
               Expanded(child: Text('Search projects, to-dos, notes', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: context.mutedText, fontSize: 13.5))),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: const Color(0xFFF1F0FA), borderRadius: BorderRadius.circular(99)),
+                decoration: BoxDecoration(color: context.softFill, borderRadius: BorderRadius.circular(99)),
                 child: Text('Ctrl K', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: context.mutedText)),
               ),
             ]),

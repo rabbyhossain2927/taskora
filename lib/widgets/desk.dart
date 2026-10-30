@@ -74,8 +74,8 @@ class DeskSeg<T> extends StatelessWidget {
                 height: 34,
                 alignment: Alignment.center,
                 padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(color: it.$1 == value ? (context.isDark ? Colors.white12 : const Color(0xFFEEEEFD)) : Colors.transparent, borderRadius: BorderRadius.circular(9)),
-                child: Text(it.$2, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: it.$1 == value ? deskLink : context.mutedText)),
+                decoration: BoxDecoration(color: it.$1 == value ? (context.isDark ? Colors.white12 : context.selTint) : Colors.transparent, borderRadius: BorderRadius.circular(9)),
+                child: Text(it.$2, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: it.$1 == value ? context.selInk : context.mutedText)),
               ),
             ),
         ]),
@@ -94,9 +94,9 @@ class DeskBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     final (bg, fg) = switch (kind) {
       'primary' => (context.accent, Colors.white),
-      'white' => (context.surface, const Color(0xFF3B2E8F)),
+      'white' => (context.surface, context.selInk),
       'danger' => (const Color(0xFFFDE2E2), const Color(0xFFB42318)),
-      _ => (context.isDark ? Colors.white12 : const Color(0xFFF1F0FA), context.isDark ? Colors.white : const Color(0xFF3B2E8F)),
+      _ => (context.isDark ? Colors.white12 : context.softFill, context.isDark ? Colors.white : context.selInk),
     };
     return Material(
       color: bg,
@@ -178,7 +178,7 @@ class _DeskHoverState extends State<DeskHover> {
             curve: Curves.easeOut,
             padding: widget.padding,
             decoration: BoxDecoration(
-              color: widget.wash && h ? (context.isDark ? Colors.white.withOpacity(0.04) : const Color(0xFFF7F5FF)) : Colors.transparent,
+              color: widget.wash && h ? (context.isDark ? Colors.white.withOpacity(0.04) : context.hoverTint) : Colors.transparent,
               borderRadius: BorderRadius.circular(widget.radius),
             ),
             child: AnimatedSlide(duration: const Duration(milliseconds: 160), curve: Curves.easeOut, offset: !widget.wash && h && widget.onTap != null ? const Offset(0, -0.01) : Offset.zero, child: widget.child),
@@ -258,7 +258,7 @@ Future<void> openEditor(BuildContext context, Widget editor) {
                 child: Tooltip(
                   message: 'Close',
                   child: Material(
-                    color: Theme.of(d).brightness == Brightness.dark ? Colors.white.withOpacity(0.08) : const Color(0xFFF1F0FA),
+                    color: Theme.of(d).brightness == Brightness.dark ? Colors.white.withOpacity(0.08) : context.softFill,
                     shape: const CircleBorder(),
                     child: InkWell(customBorder: const CircleBorder(), onTap: () => Navigator.of(d).pop(), child: const SizedBox(width: 36, height: 36, child: Icon(Icons.close_rounded, size: 20))),
                   ),

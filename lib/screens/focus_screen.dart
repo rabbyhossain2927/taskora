@@ -208,7 +208,7 @@ class _FocusScreenState extends State<FocusScreen> with TickerProviderStateMixin
       Widget glassBtn(String t, VoidCallback onTap) => Material(
             color: Colors.white.withOpacity(0.75),
             borderRadius: BorderRadius.circular(12),
-            child: InkWell(borderRadius: BorderRadius.circular(12), onTap: onTap, child: Container(height: 44, padding: const EdgeInsets.symmetric(horizontal: 18), alignment: Alignment.center, child: Text(t, style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF3B2E8F))))),
+            child: InkWell(borderRadius: BorderRadius.circular(12), onTap: onTap, child: Container(height: 44, padding: EdgeInsets.symmetric(horizontal: 18), alignment: Alignment.center, child: Text(t, style: TextStyle(fontWeight: FontWeight.w600, color: context.selInk)))),
           );
       final hero = Container(
         constraints: const BoxConstraints(minHeight: 560),
