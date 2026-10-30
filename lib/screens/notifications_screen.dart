@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import '../models.dart';
 import '../services/store.dart';
 import '../theme.dart';
+import '../services/prefs.dart';
 import '../widgets/common.dart';
+import '../widgets/desk.dart';
 import 'notification_settings.dart';
 import 'update_screen.dart';
 
@@ -19,6 +21,7 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   bool selecting = false;
   final picked = <String>{};
+  String show = 'all'; // computers: all | reminder | update | backup
 
   static const kinds = {
     'reminder': (Icons.alarm, 0),
@@ -43,6 +46,94 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final s = context.watch<Store>();
     final list = s.notices;
     final allPicked = list.isNotEmpty && picked.length == list.length;
+    if (deskWide(context)) {
+      final p = context.watch<Prefs>();
+      final muted = context.mutedText;
+      final shown = list.where((n) => show == 'all' || n.kind == show || (show == 'backup' && n.kind == 'sync')).toList();
+      return DeskScroll(children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              DeskHead('Notifications', subtitle: s.unreadCount == 0 ? 'All caught up' : '${s.unreadCount} unread', actions: [
+                DeskSeg<String>(items: const [('all', 'All'), ('reminder', 'Reminders'), ('update', 'Updates'), ('backup', 'Backups')], value: show, onChanged: (v) => setState(() => show = v)),
+                if (s.unreadCount > 0) DeskBtn('Mark all as read', kind: 'white', onTap: () => s.markRead(list.where((n) => !n.read).map((n) => n.id))),
+              ]),
+              const SizedBox(height: 14),
+              DeskCard(
+                padding: EdgeInsets.zero,
+                child: shown.isEmpty
+                    ? Padding(padding: const EdgeInsets.all(22), child: Text('Nothing here. Reminders, update alerts and backup news show up here.', style: TextStyle(color: muted)))
+                    : Column(children: [
+                        for (var i = 0; i < shown.length; i++)
+                          Builder(builder: (_) {
+                            final n = shown[i];
+                            final k = kinds[n.kind] ?? kinds['reminder']!;
+                            final pp = pastel(k.$2);
+                            return DeskHover(
+                              wash: true,
+                              radius: 0,
+                              onTap: () {
+                                if (!n.read) s.markRead([n.id]);
+                                if (n.kind == 'update') Navigator.push(context, MaterialPageRoute(builder: (_) => const UpdateScreen()));
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.fromLTRB(18, 14, 14, 14),
+                                decoration: BoxDecoration(
+                                  color: n.read ? null : (context.isDark ? Colors.white.withOpacity(0.04) : const Color(0xFFFAF8FF)),
+                                  border: i == shown.length - 1 ? null : const Border(bottom: BorderSide(color: deskLine)),
+                                ),
+                                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                  Container(width: 38, height: 38, decoration: BoxDecoration(color: pp.bg, borderRadius: BorderRadius.circular(12)), child: Icon(k.$1, size: 19, color: pp.fg)),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                      Text(n.title, style: TextStyle(fontWeight: n.read ? FontWeight.w600 : FontWeight.w700, fontSize: 14)),
+                                      if (n.body.isNotEmpty) Text(n.body, style: TextStyle(fontSize: 13, color: muted)),
+                                    ]),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(fmtStamp(n.createdAt), style: TextStyle(fontSize: 12, color: muted)),
+                                  const SizedBox(width: 10),
+                                  Container(width: 8, height: 8, margin: const EdgeInsets.only(top: 6), decoration: BoxDecoration(color: n.read ? Colors.transparent : context.accent, shape: BoxShape.circle)),
+                                  const SizedBox(width: 4),
+                                  PopupMenuButton<int>(
+                                    tooltip: 'More',
+                                    icon: Icon(Icons.more_horiz_rounded, size: 18, color: muted),
+                                    onSelected: (v) => v == 0 ? s.markRead([n.id], !n.read) : _delete(s, [n.id]),
+                                    itemBuilder: (_) => [
+                                      PopupMenuItem(value: 0, child: Text(n.read ? 'Mark as unread' : 'Mark as read')),
+                                      const PopupMenuItem(value: 1, child: Text('Delete', style: TextStyle(color: C.red))),
+                                    ],
+                                  ),
+                                ]),
+                              ),
+                            );
+                          }),
+                      ]),
+              ),
+            ]),
+          ),
+          const SizedBox(width: 18),
+          SizedBox(
+            width: 360,
+            child: DeskCard(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+                const Text('What to show', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                DeskSwitch('Notifications', p.notificationsOn, (v) => p.notificationsOn = v),
+                DeskSwitch('Reminders', p.remindersOn, (v) => p.remindersOn = v),
+                DeskSwitch('Focus timer', p.focusAlerts, (v) => p.focusAlerts = v),
+                DeskSwitch('Daily summary', p.dailySummary, (v) => p.dailySummary = v, last: true),
+                const SizedBox(height: 8),
+                Text('On the web, reminders show while TaskOra is open. Your phone still reminds you when it’s closed.', style: TextStyle(fontSize: 12.5, height: 1.5, color: muted)),
+                const SizedBox(height: 12),
+                DeskBtn('More settings', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationSettingsScreen()))),
+              ]),
+            ),
+          ),
+        ]),
+      ]);
+    }
     return Scaffold(
       body: SafeArea(
         child: Column(children: [

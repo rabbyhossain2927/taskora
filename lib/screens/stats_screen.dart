@@ -7,6 +7,7 @@ import '../services/focus_service.dart';
 import '../services/store.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/desk.dart';
 
 /// Stats: completed to-dos, completion, streak, earnings, projects by status
 /// and categories. Week / Month / Year, or any From–To range.
@@ -114,6 +115,158 @@ class _StatsScreenState extends State<StatsScreen> {
     final rangeText = period == 'custom' && custom != null
         ? '${DateFormat('d MMM y').format(custom!.start)} – ${DateFormat('d MMM y').format(custom!.end)}'
         : '${DateFormat('d MMM').format(starts.first)} – ${DateFormat('d MMM').format(rangeEnd.subtract(const Duration(days: 1)))}';
+
+    if (deskWide(context)) {
+      final muted = context.mutedText;
+      final maxC = counts.fold<int>(1, math.max);
+      Widget kpi(String label, String value, {String? extra, bool last = false}) => Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+              decoration: BoxDecoration(border: last ? null : const Border(right: BorderSide(color: deskLine))),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: muted)),
+                Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+                  Text(value, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+                  if (extra != null) ...[const SizedBox(width: 8), Text(extra, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF1E7A50)))],
+                ]),
+              ]),
+            ),
+          );
+      Widget line(String k, Widget v, {bool last = false}) => Container(
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            decoration: BoxDecoration(border: last ? null : const Border(bottom: BorderSide(color: deskLine))),
+            child: Row(children: [Expanded(child: Text(k, style: TextStyle(fontSize: 13.5, color: muted))), v]),
+          );
+      final statusTotal = byStatus.fold<int>(0, (x, y) => x + y.$2);
+      final moneyRows = [
+        for (final e in money.entries) ('You receive · ${e.key}', fmtMoney(e.value.$1, e.key), const Color(0xFF1E7A50)),
+        for (final e in money.entries.where((e) => e.value.$2 > 0)) ('Platform fees · ${e.key}', fmtMoney(e.value.$2, e.key), const Color(0xFFB42318)),
+      ];
+      final sessions = [for (final e in (focus.ready ? FocusEngine.log(focus.p) : const <String>[])) e.split('|')].where((x) => x.length >= 3 && x[2] == 'focus').map((x) => (DateTime.fromMillisecondsSinceEpoch(int.tryParse(x[0]) ?? 0), int.tryParse(x[1]) ?? 0)).where((x) => inRange(x.$1)).toList();
+      final longest = sessions.fold<int>(0, (x, y) => math.max(x, y.$2));
+      final focusMin = sessions.fold<int>(0, (x, y) => x + y.$2);
+      return DeskScroll(children: [
+        DeskHead('Stats', subtitle: rangeText, actions: [
+          DeskSeg<String>(
+            items: const [('week', 'Week'), ('month', 'Month'), ('year', 'Year'), ('custom', 'Custom')],
+            value: period,
+            onChanged: (v) => v == 'custom' ? _pickRange() : setState(() => period = v),
+          ),
+        ]),
+        const SizedBox(height: 18),
+        DeskCard(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: IntrinsicHeight(
+            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              kpi('To-dos done', '$inPeriod'),
+              kpi('Completion', '${(rate * 100).round()}%'),
+              kpi('Day streak', '$streak day${streak == 1 ? '' : 's'}'),
+              kpi('Focus time', '${focusMin ~/ 60}h ${focusMin % 60}m', last: true),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 18),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            flex: 8,
+            child: DeskCard(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                const DeskH('Completed to-dos'),
+                SizedBox(
+                  height: 240,
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    for (var i = 0; i < counts.length; i++) ...[
+                      if (i > 0) SizedBox(width: counts.length > 14 ? 4 : 14),
+                      Expanded(
+                        child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+                          Text('${counts[i]}', style: TextStyle(fontSize: 12, color: i == counts.length - 1 ? deskLink : muted, fontWeight: i == counts.length - 1 ? FontWeight.w700 : FontWeight.w400)),
+                          const SizedBox(height: 6),
+                          Container(height: 8 + 170.0 * counts[i] / maxC, decoration: BoxDecoration(color: i == counts.length - 1 ? a : const Color(0xFFDCDDFD), borderRadius: BorderRadius.circular(8))),
+                          const SizedBox(height: 6),
+                          Text(labels[i], maxLines: 1, style: TextStyle(fontSize: 12, color: i == counts.length - 1 ? deskLink : muted, fontWeight: i == counts.length - 1 ? FontWeight.w700 : FontWeight.w400)),
+                        ]),
+                      ),
+                    ],
+                  ]),
+                ),
+              ]),
+            ),
+          ),
+          const SizedBox(width: 18),
+          Expanded(
+            flex: 4,
+            child: DeskCard(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                const DeskH('Projects by status'),
+                if (byStatus.isEmpty) Text('No projects yet.', style: TextStyle(color: muted))
+                else ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(7),
+                    child: SizedBox(height: 14, child: Row(children: [for (final e in byStatus) Expanded(flex: e.$2, child: Container(margin: const EdgeInsets.only(right: 2), color: pastel(e.$1.color).fg))])),
+                  ),
+                  const SizedBox(height: 14),
+                  for (final e in byStatus)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(children: [
+                        Container(width: 10, height: 10, decoration: BoxDecoration(color: pastel(e.$1.color).fg, borderRadius: BorderRadius.circular(3))),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(e.$1.label, style: const TextStyle(fontSize: 13.5))),
+                        Text('${e.$2}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                      ]),
+                    ),
+                  Text('$statusTotal projects', style: TextStyle(fontSize: 12, color: muted)),
+                ],
+              ]),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 18),
+        IntrinsicHeight(
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Expanded(
+              child: DeskCard(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  const DeskH('Earnings'),
+                  if (moneyRows.isEmpty) Text('Add an amount to a project to see earnings.', style: TextStyle(color: muted, fontSize: 13.5)),
+                  for (var i = 0; i < moneyRows.length; i++)
+                    line(moneyRows[i].$1, Text(moneyRows[i].$2, style: TextStyle(fontWeight: FontWeight.w700, color: moneyRows[i].$3)), last: i == moneyRows.length - 1),
+                ]),
+              ),
+            ),
+            const SizedBox(width: 18),
+            Expanded(
+              child: DeskCard(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  const DeskH('Where your time goes'),
+                  if (catTotal == 0) Text('Finish some to-dos to see this.', style: TextStyle(color: muted, fontSize: 13.5)),
+                  for (final e in byCat.where((e) => e.$2 > 0).take(5))
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                        Row(children: [Expanded(child: Text(e.$1.label, style: const TextStyle(fontSize: 13.5))), Text('${(100 * e.$2 / catTotal).round()}%', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5))]),
+                        const SizedBox(height: 5),
+                        deskBar(e.$2 / catTotal, pastel(e.$1.color).fg, h: 8),
+                      ]),
+                    ),
+                ]),
+              ),
+            ),
+            const SizedBox(width: 18),
+            Expanded(
+              child: DeskCard(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  const DeskH('Focus sessions'),
+                  line('Sessions', Text('${sessions.length}', style: const TextStyle(fontWeight: FontWeight.w700))),
+                  line('Longest', Text('$longest min', style: const TextStyle(fontWeight: FontWeight.w700))),
+                  line('All time', Text('${f.$4} sessions', style: const TextStyle(fontWeight: FontWeight.w700)), last: true),
+                ]),
+              ),
+            ),
+          ]),
+        ),
+      ]);
+    }
 
     return Scaffold(
       body: SafeArea(

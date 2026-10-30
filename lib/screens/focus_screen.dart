@@ -9,6 +9,7 @@ import '../services/notify_service.dart';
 import '../services/prefs.dart';
 import '../services/store.dart';
 import '../widgets/common.dart';
+import '../widgets/desk.dart';
 
 /// Focus timer. It keeps running when you leave this page or close the app,
 /// with a live countdown and Pause / +5 min / Stop in the notification panel.
@@ -161,6 +162,183 @@ class _FocusScreenState extends State<FocusScreen> with TickerProviderStateMixin
     final c3 = Color.lerp(a, Colors.black, 0.62)!;
     final endsAt = DateTime.now().add(Duration(milliseconds: left));
     final status = f.running ? 'Ends at ${TimeOfDay.fromDateTime(endsAt).format(context)}' : (f.paused ? 'Paused' : 'Ready when you are');
+
+    if (deskWide(context)) {
+      const ink = Color(0xFF2A2170), soft = Color(0xFF4F4596);
+      final muted = context.mutedText;
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final log = [
+        for (final e in (f.ready ? FocusEngine.log(f.p) : const <String>[]))
+          if (e.split('|').length >= 3) e.split('|'),
+      ].map((x) => (DateTime.fromMillisecondsSinceEpoch(int.tryParse(x[0]) ?? 0), int.tryParse(x[1]) ?? 0, x[2])).where((x) => !x.$1.isBefore(today)).toList().reversed.toList();
+      final next = (s.todos.where((t) => !t.done).toList()
+            ..sort((x, y) => (x.deadline ?? DateTime(9999)).compareTo(y.deadline ?? DateTime(9999))))
+          .take(5)
+          .toList();
+      Widget modeBtn((String, String, IconData) m) {
+        final on = curMode == m.$1;
+        return DeskHover(
+          onTap: active ? null : () => setState(() {
+                mode = m.$1;
+                minutes = _defaultFor(m.$1);
+              }),
+          radius: 99,
+          child: Container(
+            height: 34,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: on ? Colors.white : Colors.white.withOpacity(0.45), borderRadius: BorderRadius.circular(99)),
+            child: Text(m.$2, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: on ? ink : soft.withOpacity(active && !on ? 0.5 : 1))),
+          ),
+        );
+      }
+      Widget lenBtn(String label, bool on, VoidCallback? onTap) => DeskHover(
+            onTap: onTap,
+            radius: 10,
+            child: Container(
+              height: 36,
+              constraints: const BoxConstraints(minWidth: 44),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: on ? ink : Colors.white.withOpacity(0.6), borderRadius: BorderRadius.circular(10)),
+              child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: on ? Colors.white : ink)),
+            ),
+          );
+      Widget glassBtn(String t, VoidCallback onTap) => Material(
+            color: Colors.white.withOpacity(0.75),
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(borderRadius: BorderRadius.circular(12), onTap: onTap, child: Container(height: 44, padding: const EdgeInsets.symmetric(horizontal: 18), alignment: Alignment.center, child: Text(t, style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF3B2E8F))))),
+          );
+      final hero = Container(
+        constraints: const BoxConstraints(minHeight: 560),
+        padding: const EdgeInsets.fromLTRB(30, 26, 30, 30),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFFE9E2FF), Color(0xFFDCE3FF), Color(0xFFE6F0FF)], stops: [0, 0.55, 1]),
+          boxShadow: const [BoxShadow(color: Color(0x14281E6E), blurRadius: 24, offset: Offset(0, 8))],
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Text('Focus', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: ink)),
+            const SizedBox(width: 14),
+            for (final m in _modes) ...[modeBtn(m), const SizedBox(width: 8)],
+            const Spacer(),
+            Text('${sum.$1} today · ${sum.$2 ~/ 60}h ${sum.$2 % 60}m', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: soft)),
+          ]),
+          const SizedBox(height: 70),
+          DeskHover(
+            onTap: active ? null : _pickTask,
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(text: working.isEmpty ? 'Working on ' : 'Working on '),
+                TextSpan(text: working.isEmpty ? 'pick a to-do…' : working, style: const TextStyle(color: ink, decoration: TextDecoration.underline, decorationColor: Color(0x554F4596))),
+              ]),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: soft),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(FocusEngine.fmt(left), style: const TextStyle(fontSize: 132, height: 1, fontWeight: FontWeight.w800, letterSpacing: -5, color: ink, fontFeatures: [FontFeature.tabularFigures()])),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: 560,
+            child: Row(children: [
+              Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(5), child: LinearProgressIndicator(value: progress, minHeight: 10, color: a, backgroundColor: const Color(0x243B2E8F)))),
+              const SizedBox(width: 12),
+              Text(status, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: soft)),
+            ]),
+          ),
+          const SizedBox(height: 70),
+          Row(children: [
+            SizedBox(
+              width: 170,
+              child: DeskBtn(f.running ? 'Pause' : (f.paused ? 'Resume' : 'Start'), kind: 'primary', height: 44, icon: f.running ? Icons.pause_rounded : Icons.play_arrow_rounded, onTap: () {
+                if (f.running) {
+                  f.pause();
+                } else if (f.paused) {
+                  f.resume();
+                } else {
+                  _start();
+                }
+              }),
+            ),
+            if (active) ...[
+              const SizedBox(width: 10),
+              glassBtn('+5 min', () => f.addMinutes(5)),
+              const SizedBox(width: 10),
+              glassBtn('Stop', f.stop),
+            ],
+            const Spacer(),
+            if (!active) ...[
+              for (final m in const [15, 25, 45, 60, 90]) ...[lenBtn('$m', minutes == m, () => setState(() => minutes = m)), const SizedBox(width: 6)],
+              lenBtn(const [15, 25, 45, 60, 90].contains(minutes) ? 'Custom' : '$minutes', !const [15, 25, 45, 60, 90].contains(minutes), () async {
+                final v = await askText(context, title: 'Minutes', hint: 'e.g. 50', initial: '$minutes', number: true);
+                final n = int.tryParse(v ?? '');
+                if (n != null && n > 0 && n <= 600) setState(() => minutes = n);
+              }),
+            ],
+          ]),
+        ]),
+      );
+      return DeskScroll(children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(flex: 8, child: hero),
+          const SizedBox(width: 18),
+          Expanded(
+            flex: 4,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              DeskCard(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  const DeskH('Today’s sessions'),
+                  if (log.isEmpty) Text('No sessions yet today.', style: TextStyle(color: muted, fontSize: 13.5)),
+                  for (var i = 0; i < log.length && i < 8; i++)
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      decoration: BoxDecoration(border: i == log.length - 1 || i == 7 ? null : const Border(bottom: BorderSide(color: deskLine))),
+                      child: Row(children: [
+                        Container(width: 8, height: 8, decoration: BoxDecoration(color: log[i].$3 == 'focus' ? a : const Color(0xFF0E9384), shape: BoxShape.circle)),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text(FocusEngine.modeName(log[i].$3), style: const TextStyle(fontSize: 13.5))),
+                        Text('${log[i].$2} min', style: TextStyle(fontSize: 13, color: muted)),
+                        SizedBox(width: 74, child: Text(TimeOfDay.fromDateTime(log[i].$1).format(context), textAlign: TextAlign.right, style: TextStyle(fontSize: 13, color: muted))),
+                      ]),
+                    ),
+                ]),
+              ),
+              const SizedBox(height: 18),
+              DeskCard(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  const DeskH('Focus on next'),
+                  if (next.isEmpty) Text('No open to-dos.', style: TextStyle(color: muted, fontSize: 13.5)),
+                  for (final t in next)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: DeskHover(
+                        onTap: active ? null : () => setState(() => todoId = t.id),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: todoId == t.id ? a : const Color(0xFFECEBF6), width: todoId == t.id ? 1.5 : 1),
+                          ),
+                          child: Row(children: [
+                            Expanded(child: Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500))),
+                            if (t.deadline != null)
+                              Text(
+                                t.deadline!.isBefore(today) ? 'Overdue' : fmtDue(t.deadline!),
+                                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: t.deadline!.isBefore(today) ? const Color(0xFFB42318) : muted),
+                              ),
+                          ]),
+                        ),
+                      ),
+                    ),
+                ]),
+              ),
+            ]),
+          ),
+        ]),
+      ]);
+    }
 
     return Scaffold(
       body: AnimatedContainer(

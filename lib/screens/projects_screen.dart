@@ -8,6 +8,7 @@ import '../services/prefs.dart';
 import '../services/store.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/desk.dart';
 import 'project_detail.dart';
 import 'project_editor.dart';
 import 'todo_editor.dart';
@@ -95,6 +96,7 @@ class ProjectsScreen extends StatefulWidget {
 
 class _ProjectsScreenState extends State<ProjectsScreen> {
   bool showDone = false;
+  String fStatus = 'all'; // computers: all | done | a status key
 
   @override
   Widget build(BuildContext context) {
@@ -123,6 +125,70 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           ]);
     final active = s.projects.where((p) => !p.done).toList();
     final done = s.projects.where((p) => p.done).toList();
+    if (deskWide(context)) {
+      final shown = switch (fStatus) { 'all' => [...active, ...done], 'done' => done, _ => active.where((p) => p.status == fStatus).toList() };
+      final money = <String, double>{};
+      for (final p in s.projects.where((p) => (p.amount ?? 0) > 0)) {
+        money[p.currency] = (money[p.currency] ?? 0) + p.net;
+      }
+      final sub = '${active.length} active · ${done.length} completed${money.isEmpty ? '' : ' · ${money.entries.map((e) => fmtMoney(e.value, e.key)).join(' · ')}'}';
+      final newCard = DeskHover(
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProjectEditor(), fullscreenDialog: true)),
+        radius: 18,
+        child: CustomPaint(
+          painter: _DashedBorder(context.accent.withOpacity(0.35)),
+          child: Center(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.add_rounded, color: context.accent, size: 28),
+              const SizedBox(height: 6),
+              Text('New project', style: TextStyle(color: context.accent, fontWeight: FontWeight.w600, fontSize: 14)),
+            ]),
+          ),
+        ),
+      );
+      return Scaffold(
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(28, 22, 28, 0),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              DeskHead('Projects', subtitle: sub, actions: [
+                DeskSeg<String>(items: const [('grid', 'Grid'), ('list', 'List'), ('board', 'Board')], value: view, onChanged: (v) => prefs.projectView = v),
+                DeskBtn('New project', kind: 'primary', icon: Icons.add_rounded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProjectEditor(), fullscreenDialog: true))),
+              ]),
+              const SizedBox(height: 14),
+              if (!board)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: Wrap(spacing: 8, runSpacing: 8, children: [
+                    DeskFilter('All · ${s.projects.length}', on: fStatus == 'all', onTap: () => setState(() => fStatus = 'all')),
+                    for (final st in s.statuses)
+                      if (active.any((p) => p.status == st.key)) DeskFilter('${st.label} · ${active.where((p) => p.status == st.key).length}', on: fStatus == st.key, onTap: () => setState(() => fStatus = st.key)),
+                    if (done.isNotEmpty) DeskFilter('Completed · ${done.length}', on: fStatus == 'done', onTap: () => setState(() => fStatus = 'done')),
+                  ]),
+                ),
+              Expanded(
+                child: board
+                    ? _Board(store: s)
+                    : grid
+                        ? LayoutBuilder(builder: (context, c) {
+                            final n = (c.maxWidth / 260).floor().clamp(2, 6);
+                            final w = (c.maxWidth - 16 * (n - 1)) / n;
+                            return GridView.builder(
+                              padding: const EdgeInsets.only(bottom: 28),
+                              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: n, mainAxisSpacing: 16, crossAxisSpacing: 16, mainAxisExtent: w + ProjectTile.infoHeight),
+                              itemCount: shown.length + 1,
+                              itemBuilder: (_, i) => i == shown.length ? newCard : FadeIn(index: i, child: Opacity(opacity: shown[i].done ? 0.72 : 1, child: ProjectTile(p: shown[i]))),
+                            );
+                          })
+                        : ListView(padding: const EdgeInsets.only(bottom: 28), children: [
+                            for (var i = 0; i < shown.length; i++) FadeIn(index: i, child: Padding(padding: const EdgeInsets.only(bottom: 10), child: Opacity(opacity: shown[i].done ? 0.72 : 1, child: _SwipeProject(p: shown[i])))),
+                          ]),
+              ),
+            ]),
+          ),
+        ),
+      );
+    }
     return SafeArea(
       bottom: false,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -497,4 +563,27 @@ class ProjectTile extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// Dashed rounded outline for the "New project" tile.
+class _DashedBorder extends CustomPainter {
+  final Color color;
+  _DashedBorder(this.color);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    final path = Path()..addRRect(RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(18)));
+    for (final m in path.computeMetrics()) {
+      for (double d = 0; d < m.length; d += 12) {
+        canvas.drawPath(m.extractPath(d, d + 6), p);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedBorder o) => o.color != color;
 }

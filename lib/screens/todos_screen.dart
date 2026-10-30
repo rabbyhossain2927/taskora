@@ -8,6 +8,7 @@ import '../services/prefs.dart';
 import '../services/store.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/desk.dart';
 import 'todo_editor.dart';
 
 Future<void> deleteTodos(BuildContext context, List<String> ids) async {
@@ -224,6 +225,14 @@ class TodosScreen extends StatefulWidget {
 
 class _TodosScreenState extends State<TodosScreen> {
   String? cat;
+  String show = 'all'; // computers: all | today | upcoming | done
+  final _add = TextEditingController();
+
+  @override
+  void dispose() {
+    _add.dispose();
+    super.dispose();
+  }
   bool selecting = false;
   final picked = <String>{};
   final closed = <String>{'Completed'};
@@ -260,6 +269,120 @@ class _TodosScreenState extends State<TodosScreen> {
       if (prefs.showCompleted) 'Completed': list.where((t) => t.done).toList(),
     };
     var idx = 0;
+
+    if (deskWide(context)) {
+      final muted = context.mutedText;
+      final doneToday = list.where((t) => t.done && t.completedAt != null && !t.completedAt!.isBefore(today)).toList();
+      final sections = <(String, Color, List<Todo>)>[
+        if (show == 'all' || show == 'today') ('Overdue', const Color(0xFFB42318), groups['Overdue']!),
+        if (show == 'all' || show == 'today') ('Today', deskLink, groups['Today']!),
+        if (show == 'all' || show == 'upcoming') ('Upcoming', const Color(0xFF4B4B5A), groups['Upcoming']!),
+        if (show == 'all') ('No date', const Color(0xFF4B4B5A), groups['No date']!),
+        if (show == 'all') ('Done today', const Color(0xFF4B4B5A), doneToday),
+        if (show == 'done') ('Done', const Color(0xFF4B4B5A), list.where((t) => t.done).toList()),
+      ].where((x) => x.$3.isNotEmpty).toList();
+      void quickAdd() {
+        final t = _add.text.trim();
+        if (t.isEmpty) return;
+        s.saveTodo(Todo(id: newId(), title: t, category: cat ?? 'work', deadline: show == 'today' ? today : null, priority: prefs.defaultPriority));
+        _add.clear();
+      }
+      final weekAgo = today.subtract(const Duration(days: 6));
+      final weekDone = s.todos.where((t) => t.done && t.completedAt != null && !t.completedAt!.isBefore(weekAgo)).length;
+      return DeskScroll(children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              DeskHead('To-do', subtitle: '${open.length} open${groups['Overdue']!.isEmpty ? '' : ' · ${groups['Overdue']!.length} overdue'} · ${doneToday.length} done today', actions: [
+                DeskSeg<String>(items: const [('all', 'All'), ('today', 'Today'), ('upcoming', 'Upcoming'), ('done', 'Done')], value: show, onChanged: (v) => setState(() => show = v)),
+                DeskBtn('New to-do', kind: 'primary', icon: Icons.add_rounded, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TodoEditor(), fullscreenDialog: true))),
+              ]),
+              const SizedBox(height: 14),
+              DeskCard(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Row(children: [
+                  Icon(Icons.add_rounded, color: muted, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _add,
+                      onSubmitted: (_) => quickAdd(),
+                      style: const TextStyle(fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: show == 'today' ? 'Add a to-do for today…' : 'Add a to-do…',
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        filled: false,
+                      ),
+                    ),
+                  ),
+                  deskChip('Enter', const Color(0xFFF1F0FA), muted),
+                ]),
+              ),
+              const SizedBox(height: 14),
+              DeskCard(
+                padding: const EdgeInsets.fromLTRB(6, 6, 6, 10),
+                child: sections.isEmpty
+                    ? Padding(padding: const EdgeInsets.all(16), child: Text(show == 'done' ? 'Nothing done yet.' : 'Nothing here. Enjoy the calm.', style: TextStyle(color: muted)))
+                    : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                        for (final sec in sections) ...[
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
+                            child: Text('${sec.$1}  ${sec.$3.length}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: sec.$2)),
+                          ),
+                          for (final t in sec.$3) TodoRow(todo: t),
+                        ],
+                      ]),
+              ),
+            ]),
+          ),
+          const SizedBox(width: 18),
+          SizedBox(
+            width: 340,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              DeskCard(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  const DeskH('Categories'),
+                  for (final c in [const Tag('all', 'All to-dos', 19, 'all_inclusive'), ...s.todoCats])
+                    DeskHover(
+                      wash: true,
+                      onTap: () => setState(() => cat = c.key == 'all' ? null : c.key),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      child: Row(children: [
+                        Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(color: pastel(c.color).bg, borderRadius: BorderRadius.circular(9)),
+                          child: Icon(iconOf(c.icon), size: 15, color: pastel(c.color).fg),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(c.label,
+                              style: TextStyle(fontSize: 13.5, fontWeight: (cat ?? 'all') == c.key ? FontWeight.w700 : FontWeight.w500, color: (cat ?? 'all') == c.key ? deskLink : null)),
+                        ),
+                        Text('${s.todos.where((t) => !t.done && (c.key == 'all' || t.category == c.key)).length}', style: TextStyle(fontSize: 12.5, color: muted)),
+                      ]),
+                    ),
+                ]),
+              ),
+              const SizedBox(height: 18),
+              DeskCard(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  const DeskH('This week'),
+                  Row(children: [
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('$weekDone', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800)), Text('done in 7 days', style: TextStyle(fontSize: 12.5, color: muted))])),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('${groups['Upcoming']!.length}', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800)), Text('coming up', style: TextStyle(fontSize: 12.5, color: muted))])),
+                  ]),
+                  const SizedBox(height: 12),
+                  Text('Tip: right-click a to-do for more options.', style: TextStyle(fontSize: 12, color: muted)),
+                ]),
+              ),
+            ]),
+          ),
+        ]),
+      ]);
+    }
 
     return Scaffold(
       body: SafeArea(

@@ -136,7 +136,7 @@ class ShellState extends State<Shell> with WidgetsBindingObserver, SingleTickerP
             return Opacity(opacity: 0.35 + 0.65 * v, child: Transform.translate(offset: Offset(0, (1 - v) * 14), child: child));
           },
           child: IndexedStack(index: t, children: [
-            for (final (w, max) in const [(HomeScreen(), 1480.0), (ProjectsScreen(), 1480.0), (TodosScreen(), 1000.0), (NotesScreen(), double.infinity)])
+            for (final (w, max) in const [(HomeScreen(), double.infinity), (ProjectsScreen(), double.infinity), (TodosScreen(), double.infinity), (NotesScreen(), double.infinity)])
               // Computers: keep each page at a comfortable width, centred.
               _wide ? Align(alignment: Alignment.topCenter, child: ConstrainedBox(constraints: BoxConstraints(maxWidth: max), child: w)) : w,
           ]),
@@ -616,14 +616,14 @@ class _ItemState extends State<_Item> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
           height: 42,
           margin: EdgeInsets.symmetric(horizontal: widget.full ? 12 : 14, vertical: 2),
           padding: EdgeInsets.symmetric(horizontal: widget.full ? 8 : 0),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            color: sel ? (dark ? Colors.white.withOpacity(0.08) : Colors.white) : (hover ? (dark ? Colors.white10 : Colors.white.withOpacity(0.6)) : Colors.transparent),
+            color: sel ? (dark ? Colors.white.withOpacity(0.08) : Colors.white) : (hover ? (dark ? Colors.white.withOpacity(0.06) : const Color(0xFFF1EFFF)) : Colors.transparent),
             boxShadow: sel && !dark ? const [BoxShadow(color: Color(0x247859DC), blurRadius: 18, offset: Offset(0, 6))] : null,
           ),
           child: Row(mainAxisAlignment: widget.full ? MainAxisAlignment.start : MainAxisAlignment.center, children: [
@@ -636,7 +636,7 @@ class _ItemState extends State<_Item> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontWeight: sel ? FontWeight.w700 : FontWeight.w500, fontSize: 14, color: sel ? null : (dark ? null : const Color(0xFF4B4B5A)))),
               ),
-              if (badge != null) badge else if (widget.hint != null && hover && !sel) Text(widget.hint!, style: TextStyle(fontSize: 11, color: context.mutedText)),
+              if (badge != null) badge,
             ],
           ]),
         ),

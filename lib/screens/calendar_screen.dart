@@ -6,6 +6,7 @@ import '../services/prefs.dart';
 import '../services/store.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/desk.dart';
 import 'project_detail.dart';
 import 'todo_editor.dart';
 import 'todos_screen.dart';
@@ -44,6 +45,131 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final dayTodos = s.todos.where((t) => t.deadline != null && d0(t.deadline!) == selected).toList();
     final dayProjects = s.projects.where((p) => p.deadline != null && d0(p.deadline!) == selected).toList();
     final today = d0(DateTime.now());
+
+    if (deskWide(context)) {
+      final muted = context.mutedText;
+      Widget navBtn(IconData ic, String tip, VoidCallback onTap) => Tooltip(
+            message: tip,
+            child: Material(color: context.surface, borderRadius: BorderRadius.circular(10), child: InkWell(borderRadius: BorderRadius.circular(10), onTap: onTap, child: SizedBox(width: 36, height: 36, child: Icon(ic, size: 20)))),
+          );
+      List<(String, Color, Color, VoidCallback)> eventsOn(DateTime d) => [
+            for (final p in s.projects.where((p) => p.deadline != null && !p.done && d0(p.deadline!) == d))
+              (p.title, pastel(p.color).bg, pastel(p.color).fg, () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProjectDetail(id: p.id)))),
+            for (final t in s.todos.where((t) => t.deadline != null && !t.done && d0(t.deadline!) == d))
+              (t.title, const Color(0xFFE6DEFF), const Color(0xFF5B3FD0), () => Navigator.push(context, MaterialPageRoute(builder: (_) => TodoEditor(id: t.id)))),
+          ];
+      final open = dayTodos.where((t) => !t.done).length;
+      final late = dayTodos.where((t) => !t.done && t.deadline!.isBefore(DateTime.now())).length;
+      return Scaffold(
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(28, 22, 28, 28),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Row(children: [
+                    Expanded(child: Text(DateFormat('MMMM y').format(month), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.5))),
+                    navBtn(Icons.chevron_left_rounded, 'Previous month', () => setState(() => month = DateTime(month.year, month.month - 1))),
+                    const SizedBox(width: 10),
+                    DeskBtn('Today', kind: 'white', height: 36, onTap: () => setState(() {
+                      month = DateTime(today.year, today.month);
+                      selected = today;
+                    })),
+                    const SizedBox(width: 10),
+                    navBtn(Icons.chevron_right_rounded, 'Next month', () => setState(() => month = DateTime(month.year, month.month + 1))),
+                  ]),
+                  const SizedBox(height: 14),
+                  Expanded(
+                    child: DeskCard(
+                      padding: EdgeInsets.zero,
+                      child: Column(children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(0, 10, 0, 8),
+                          child: Row(children: [for (final n in names) Expanded(child: Padding(padding: const EdgeInsets.only(left: 10), child: Text(n, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: muted))))]),
+                        ),
+                        for (var r = 0; r < cells.length ~/ 7; r++)
+                          Expanded(
+                            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                              for (var c = 0; c < 7; c++)
+                                Expanded(
+                                  child: Builder(builder: (_) {
+                                    final d = cells[r * 7 + c];
+                                    final ev = d == null ? const <(String, Color, Color, VoidCallback)>[] : eventsOn(d);
+                                    final isSel = d != null && d == selected, isToday = d == today;
+                                    return DeskHover(
+                                      onTap: d == null ? null : () => setState(() => selected = d),
+                                      radius: 0,
+                                      wash: true,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: isSel ? (context.isDark ? Colors.white10 : const Color(0xFFF6F5FF)) : null,
+                                          border: const Border(top: BorderSide(color: deskLine), left: BorderSide(color: deskLine)),
+                                        ),
+                                        child: d == null
+                                            ? const SizedBox()
+                                            : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                                Container(
+                                                  width: 24,
+                                                  height: 24,
+                                                  alignment: Alignment.center,
+                                                  decoration: isToday ? BoxDecoration(color: context.accent, shape: BoxShape.circle) : null,
+                                                  child: Text('${d.day}', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: isToday ? Colors.white : null)),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                for (final e in ev.take(2))
+                                                  Container(
+                                                    margin: const EdgeInsets.only(bottom: 3),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                                    decoration: BoxDecoration(color: e.$2, borderRadius: BorderRadius.circular(6)),
+                                                    child: Text(e.$1, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: e.$3)),
+                                                  ),
+                                                if (ev.length > 2) Text('+${ev.length - 2} more', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: muted)),
+                                              ]),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                            ]),
+                          ),
+                      ]),
+                    ),
+                  ),
+                ]),
+              ),
+              const SizedBox(width: 18),
+              SizedBox(
+                width: 360,
+                child: DeskCard(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+                    Text(DateFormat('EEEE, d MMM').format(selected), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2, bottom: 10),
+                      child: Text(dayTodos.isEmpty && dayProjects.isEmpty ? 'Nothing on this day' : '$open to-do${open == 1 ? '' : 's'}${late > 0 ? ' · $late overdue' : ''}${dayProjects.isEmpty ? '' : ' · ${dayProjects.length} project deadline${dayProjects.length == 1 ? '' : 's'}'}', style: TextStyle(fontSize: 13, color: muted)),
+                    ),
+                    for (final p in dayProjects)
+                      DeskHover(
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProjectDetail(id: p.id))),
+                        wash: true,
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                        child: Row(children: [
+                          IconTile(icon: p.icon, color: p.color, size: 30),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5))),
+                          Text('Deadline', style: TextStyle(fontSize: 12, color: muted)),
+                        ]),
+                      ),
+                    for (final t in dayTodos) TodoRow(todo: t),
+                    const SizedBox(height: 10),
+                    DeskBtn('+ Add to-do on this day', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TodoEditor(deadline: selected), fullscreenDialog: true))),
+                  ]),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       body: SafeArea(
