@@ -36,6 +36,65 @@ Future<void> importNotes(BuildContext context, {String? folderId}) async {
   }
 }
 
+/// A folder's colour and icon (its own choice, or automatic by position).
+Pastel folderPastel(NoteSection f, int index) => pastel(f.color >= 0 ? f.color : (index * 3 + 2) % pastels.length);
+IconData folderIcon(NoteSection f) => f.icon.isEmpty ? Icons.folder_rounded : iconOf(f.icon);
+
+/// Choose a folder's colour and icon.
+Future<void> editFolderLook(BuildContext context, NoteSection f, int index) async {
+  final s = context.read<Store>();
+  await showModalBottomSheet(
+    context: context,
+    showDragHandle: true,
+    builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
+      final p = folderPastel(f, index);
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Container(width: 46, height: 46, decoration: BoxDecoration(color: p.bg, borderRadius: BorderRadius.circular(14)), child: Icon(folderIcon(f), color: p.fg)),
+              const SizedBox(width: 12),
+              Expanded(child: Text(f.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+            ]),
+            const SizedBox(height: 18),
+            Text('Colour', style: TextStyle(fontWeight: FontWeight.w600, color: ctx.mutedText)),
+            const SizedBox(height: 10),
+            Wrap(spacing: 10, runSpacing: 10, children: [
+              for (var i = 0; i < pastels.length; i++)
+                GestureDetector(
+                  onTap: () {
+                    set(() => f.color = i);
+                    s.saveSection(f);
+                  },
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(color: pastel(i).bg, shape: BoxShape.circle, border: Border.all(color: f.color == i ? pastel(i).fg : Colors.transparent, width: 2.5)),
+                    child: f.color == i ? Icon(Icons.check_rounded, size: 18, color: pastel(i).fg) : null,
+                  ),
+                ),
+            ]),
+            const SizedBox(height: 18),
+            Text('Icon', style: TextStyle(fontWeight: FontWeight.w600, color: ctx.mutedText)),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              icon: Icon(folderIcon(f)),
+              label: const Text('Choose icon'),
+              onPressed: () async {
+                final k = await pickIcon(ctx, current: f.icon.isEmpty ? null : f.icon, color: f.color >= 0 ? f.color : 0);
+                if (k == null) return;
+                set(() => f.icon = k);
+                s.saveSection(f);
+              },
+            ),
+          ]),
+        ),
+      );
+    }),
+  );
+}
+
 /// Ask which folder; returns '' for "No folder", null if cancelled.
 Future<String?> askFolder(BuildContext context, [String? current]) async {
   final s = context.read<Store>();
@@ -284,7 +343,7 @@ class _NotesScreenState extends State<NotesScreen> {
         for (var i = 0; i < s.sections.length; i++)
           GestureDetector(
             onSecondaryTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FolderScreen(id: s.sections[i].id))),
-            child: fold(s.sections[i].id, Icons.folder_rounded, s.sections[i].title, s.notes.where((n) => n.sectionId == s.sections[i].id).length, pastel((i * 3 + 2) % pastels.length).fg),
+            child: fold(s.sections[i].id, folderIcon(s.sections[i]), s.sections[i].title, s.notes.where((n) => n.sectionId == s.sections[i].id).length, folderPastel(s.sections[i], i).fg),
           ),
         fold('none', Icons.folder_outlined, 'No folder', s.notes.where((n) => n.sectionId == null || s.sections.every((x) => x.id != n.sectionId)).length, muted),
         if (s.tags.isNotEmpty) ...[
@@ -483,14 +542,14 @@ class _FolderCard extends StatelessWidget {
   const _FolderCard({required this.f, required this.count, required this.color});
   @override
   Widget build(BuildContext context) {
-    final p = pastel((color * 3 + 2) % pastels.length);
+    final p = folderPastel(f, color);
     return Box(
       color: context.isDark ? p.fg.withOpacity(0.22) : p.bg,
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FolderScreen(id: f.id))),
       padding: const EdgeInsets.all(14),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Icon(Icons.folder_rounded, color: context.isDark ? Colors.white : p.fg, size: 26),
+          Icon(folderIcon(f), color: context.isDark ? Colors.white : p.fg, size: 26),
           const Spacer(),
           if (f.onHome) Icon(Icons.home_rounded, size: 16, color: context.isDark ? Colors.white70 : p.fg),
         ]),
@@ -509,13 +568,13 @@ class _FolderRow extends StatelessWidget {
   const _FolderRow({required this.f, required this.count, required this.color});
   @override
   Widget build(BuildContext context) {
-    final p = pastel((color * 3 + 2) % pastels.length);
+    final p = folderPastel(f, color);
     return InkWell(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FolderScreen(id: f.id))),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         child: Row(children: [
-          Container(width: 38, height: 38, decoration: BoxDecoration(color: context.isDark ? p.fg.withOpacity(0.25) : p.bg, borderRadius: BorderRadius.circular(12)), child: Icon(Icons.folder_rounded, size: 21, color: context.isDark ? Colors.white : p.fg)),
+          Container(width: 38, height: 38, decoration: BoxDecoration(color: context.isDark ? p.fg.withOpacity(0.25) : p.bg, borderRadius: BorderRadius.circular(12)), child: Icon(folderIcon(f), size: 21, color: context.isDark ? Colors.white : p.fg)),
           const SizedBox(width: 12),
           Expanded(child: Text(f.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5))),
           if (f.onHome) Padding(padding: const EdgeInsets.only(right: 6), child: Icon(Icons.home_rounded, size: 16, color: context.mutedText)),
@@ -567,6 +626,7 @@ class _FolderScreenState extends State<FolderScreen> {
                     s.saveSection(f);
                   }
                 }),
+                ActionItem(Icons.palette_outlined, 'Colour & icon', () => editFolderLook(context, f, s.sections.indexOf(f))),
                 ActionItem(Icons.upload_file_rounded, 'Import documents here', () => importNotes(context, folderId: f.id)),
                 ActionItem(Icons.checklist_rounded, 'Select notes', () => setState(() => selecting = true)),
                 ActionItem(Icons.delete_outline_rounded, 'Delete folder (keep notes)', () async {

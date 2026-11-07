@@ -115,6 +115,7 @@ class _ProjectDetailState extends State<ProjectDetail> {
         child: SyncRefresh(
           child: ListView(padding: const EdgeInsets.only(bottom: 40), children: [
             Header('', actions: [
+              ProjectCheck(p, size: 22),
               RoundButton(icon: Icons.edit_outlined, tooltip: 'Edit', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProjectEditor(id: p.id)))),
               RoundButton(icon: Icons.more_horiz_rounded, tooltip: 'More', onTap: () => showProjectActions(context, p, fromDetail: true)),
             ]),

@@ -417,6 +417,7 @@ class _ProjectMini extends StatelessWidget {
           Row(children: [
             Container(width: 34, height: 34, decoration: BoxDecoration(color: Colors.white.withOpacity(0.75), borderRadius: BorderRadius.circular(11)), child: Icon(iconOf(p.icon), color: c.fg, size: 18)),
             const Spacer(),
+            Transform.scale(scale: 0.8, child: ProjectCheck(p, onImage: true)),
             if (p.deadline != null) Text(dShort.format(p.deadline!), style: TextStyle(color: context.isDark ? Colors.white70 : c.fg, fontWeight: FontWeight.w600, fontSize: 11.5)),
           ]),
           const Spacer(),

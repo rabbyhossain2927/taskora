@@ -324,10 +324,18 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
         },
       );
       if (files.isEmpty || !mounted) return;
+      // Each image sits on its own line: text before it stays above, and you
+      // keep typing on the line below it.
       var pos = at;
+      final text = c.document.toPlainText();
+      if (pos > 0 && pos <= text.length && text[pos - 1] != '\n') {
+        c.replaceText(pos, 0, '\n', null);
+        pos += 1;
+      }
       for (final f in files) {
         c.replaceText(pos, 0, BlockEmbed.image(f.url), null);
-        pos += 1;
+        c.replaceText(pos + 1, 0, '\n', null);
+        pos += 2;
       }
       c.updateSelection(TextSelection.collapsed(offset: pos.clamp(0, c.document.length - 1)), ChangeSource.local);
       setState(() => focused = b);
@@ -537,6 +545,16 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                   ),
                 ]),
               ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(76, 0, 22, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    isNew && !_savedOnce ? 'New note' : 'Created ${fmtStamp(n.createdAt)}  ·  Edited ${fmtStamp(n.updatedAt)}',
+                    style: TextStyle(fontSize: 11.5, color: muted),
+                  ),
+                ),
+              ),
               // ---------- tabs ----------
               SizedBox(
                 height: 44,
@@ -567,6 +585,9 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                 ]),
               ),
               // ---------- blocks ----------
+              if (cur.blocks.length == 1 && cur.blocks.first.type == 'doc' && uploading == null)
+                Expanded(child: _docEditor(cur.blocks.first, 0, ink, muted, full: true))
+              else
               Expanded(
                 child: ListView(
                   key: ValueKey('tab-${cur.id}'),
@@ -586,16 +607,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: _focusEnd,
-                      child: SizedBox(
-                        height: 260,
-                        child: Align(
-                          alignment: Alignment.bottomLeft,
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: Text('Created ${fmtStamp(n.createdAt)}  ·  Edited ${fmtStamp(n.updatedAt)}', style: TextStyle(fontSize: 11.5, color: muted)),
-                          ),
-                        ),
-                      ),
+                      child: const SizedBox(height: 120),
                     ),
                   ],
                 ),
@@ -752,9 +764,10 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
         ]),
       );
 
-  Widget _block(NoteBlock b, int i, Color? ink, Color muted) {
-    switch (b.type) {
-      case 'doc':
+
+  /// The rich-text editor for one text block. [full]: it is the only block in
+  /// the tab, so it fills the page and scrolls itself.
+  Widget _docEditor(NoteBlock b, int i, Color? ink, Color muted, {bool full = false}) {
         final c = _ctrlFor(b);
         final firstDoc = cur.blocks.indexWhere((x) => x.type == 'doc') == i;
         final key = _keys.putIfAbsent(b, GlobalKey.new);
@@ -771,10 +784,13 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
             focusNode: _nodeFor(b),
             scrollController: _scrolls.putIfAbsent(b, ScrollController.new),
             configurations: QuillEditorConfigurations(
-              scrollable: false,
-              expands: false,
+              // One text block: the editor scrolls by itself, so the line you type
+              // stays above the keyboard and toolbar, and selection is exact.
+              scrollable: full,
+              expands: full,
               autoFocus: false,
-              padding: const EdgeInsets.symmetric(vertical: 4),
+              padding: full ? const EdgeInsets.fromLTRB(22, 4, 22, 120) : const EdgeInsets.symmetric(vertical: 4),
+              scrollBottomInset: full ? 56 : 0,
               placeholder: firstDoc ? 'Start writing…' : 'Text',
               customStyles: noteStyles(context, ink, context.accent, muted),
               embedBuilders: [NoteImageEmbed()],
@@ -796,6 +812,12 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
           ),
           ),
         );
+  }
+
+  Widget _block(NoteBlock b, int i, Color? ink, Color muted) {
+    switch (b.type) {
+      case 'doc':
+        return _docEditor(b, i, ink, muted);
       case 'check':
         return _checkBlock(b, i, ink);
       case 'dropdown':

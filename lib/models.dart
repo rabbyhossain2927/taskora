@@ -341,10 +341,18 @@ class NoteSection {
   String title;
   bool onHome;
   int order;
-  NoteSection({required this.id, this.title = '', this.onHome = false, this.order = 0});
-  Map<String, dynamic> toMap() => {'title': title, 'onHome': onHome, 'order': order};
-  factory NoteSection.fromMap(String id, Map<String, dynamic> m) =>
-      NoteSection(id: id, title: m['title'] ?? '', onHome: m['onHome'] ?? false, order: ((m['order'] ?? 0) as num).toInt());
+  int color; // -1 = automatic (by position)
+  String icon; // '' = folder icon
+  NoteSection({required this.id, this.title = '', this.onHome = false, this.order = 0, this.color = -1, this.icon = ''});
+  Map<String, dynamic> toMap() => {'title': title, 'onHome': onHome, 'order': order, 'color': color, 'icon': icon};
+  factory NoteSection.fromMap(String id, Map<String, dynamic> m) => NoteSection(
+        id: id,
+        title: m['title'] ?? '',
+        onHome: m['onHome'] ?? false,
+        order: ((m['order'] ?? 0) as num).toInt(),
+        color: ((m['color'] ?? -1) as num).toInt(),
+        icon: m['icon'] ?? '',
+      );
 }
 
 class AppNotice {

@@ -822,6 +822,7 @@ class PreferencesScreen extends StatelessWidget {
                 DropdownTile<String>(icon: Icons.payments_outlined, color: 8, title: 'Default currency', value: p.defaultCurrency, options: [for (final c in currencySymbols.keys) (c, c)], onChanged: (v) => p.defaultCurrency = v),
                 DropdownTile<String>(icon: Icons.storefront_outlined, color: 10, title: 'Default platform', value: p.defaultPlatform, options: const [('direct', 'Direct'), ('fiverr', 'Fiverr 20%'), ('upwork', 'Upwork 10%'), ('custom', 'Custom')], onChanged: (v) => p.defaultPlatform = v),
                 _switch('Show money on cards', p.showMoney, (v) => p.showMoney = v, icon: Icons.visibility_outlined, color: 12),
+                _switch('Spell check in notes', p.spellCheck, (v) => p.spellCheck = v, icon: Icons.spellcheck_rounded, color: 4),
               ]),
               group('Notes', [
                 _switch('Grid view', p.notesGrid, (v) => p.notesGrid = v, icon: Icons.grid_view_rounded, color: 6),

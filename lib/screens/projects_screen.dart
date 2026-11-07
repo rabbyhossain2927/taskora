@@ -107,8 +107,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     final grid = view == 'grid';
     Widget cards(List<Project> list, {bool faded = false}) => grid
         ? LayoutBuilder(builder: (context, c) {
-            // Phones: one big card per row. Computers: several.
-            final n = isDesktop(context) ? (c.maxWidth / 230).floor().clamp(2, 6) : 1;
+            // Phones: two cards per row. Computers: several.
+            final n = isDesktop(context) ? (c.maxWidth / 230).floor().clamp(2, 6) : 2;
             final w = (c.maxWidth - 12 * (n - 1)) / n;
             return GridView.builder(
               shrinkWrap: true,
@@ -296,49 +296,107 @@ class _SwipeProject extends StatelessWidget {
       );
 }
 
-class _Board extends StatelessWidget {
+/// Phone board: hold a card, drag it to another column (like Trello).
+/// The board scrolls sideways by itself when you drag near the edge.
+class _Board extends StatefulWidget {
   final Store store;
   const _Board({required this.store});
   @override
+  State<_Board> createState() => _BoardState();
+}
+
+class _BoardState extends State<_Board> {
+  final scroll = ScrollController();
+  String? over;
+
+  @override
+  void dispose() {
+    scroll.dispose();
+    super.dispose();
+  }
+
+  void _edgeScroll(Offset global) {
+    if (!scroll.hasClients) return;
+    final w = MediaQuery.sizeOf(context).width;
+    final step = global.dx < 48 ? -14.0 : (global.dx > w - 48 ? 14.0 : 0.0);
+    if (step == 0) return;
+    scroll.jumpTo((scroll.offset + step).clamp(0.0, scroll.position.maxScrollExtent));
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final store = widget.store;
     final screen = MediaQuery.of(context).size.width;
     final width = screen >= 700 ? 300.0 : screen * 0.78;
     return ListView(
+      controller: scroll,
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.fromLTRB(20, 4, 8, 110),
       children: [
         for (final st in store.statuses)
           Builder(builder: (context) {
             final items = store.projects.where((p) => p.status == st.key).toList();
-            return Container(
-              width: width,
-              margin: const EdgeInsets.only(right: 12),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: context.isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.55),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: context.isDark ? Colors.white10 : C.line),
-              ),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(6, 4, 6, 10),
-                  child: Row(children: [
-                    TagChip(st, small: true),
-                    const Spacer(),
-                    Text('${items.length}', style: TextStyle(fontWeight: FontWeight.w700, color: context.mutedText)),
+            final pc = pastel(st.color);
+            return DragTarget<Project>(
+              onWillAcceptWithDetails: (d) {
+                if (over != st.key) setState(() => over = st.key);
+                return d.data.status != st.key;
+              },
+              onLeave: (_) => setState(() => over = null),
+              onAcceptWithDetails: (d) {
+                setState(() => over = null);
+                final p = d.data;
+                p.status = st.key;
+                p.done = st.key == 'complete';
+                store.saveProject(p);
+                HapticFeedback.lightImpact();
+              },
+              builder: (context, cand, _) {
+                final hot = over == st.key && cand.isNotEmpty;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: width,
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: hot ? pc.bg.withOpacity(context.isDark ? 0.2 : 0.8) : (context.isDark ? Colors.white.withOpacity(0.04) : Colors.white.withOpacity(0.55)),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: hot ? pc.fg.withOpacity(0.5) : (context.isDark ? Colors.white10 : C.line), width: hot ? 1.5 : 1),
+                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(6, 4, 6, 10),
+                      child: Row(children: [
+                        TagChip(st, small: true),
+                        const Spacer(),
+                        Text('${items.length}', style: TextStyle(fontWeight: FontWeight.w700, color: context.mutedText)),
+                      ]),
+                    ),
+                    Expanded(
+                      child: ListView(children: [
+                        for (final p in items)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: LongPressDraggable<Project>(
+                              data: p,
+                              delay: const Duration(milliseconds: 300),
+                              hapticFeedbackOnStart: true,
+                              onDragUpdate: (d) => _edgeScroll(d.globalPosition),
+                              feedback: Material(color: Colors.transparent, child: SizedBox(width: width - 20, child: Transform.rotate(angle: 0.03, child: Opacity(opacity: 0.95, child: ProjectCard(p: p, inBoard: true))))),
+                              childWhenDragging: Opacity(opacity: 0.3, child: ProjectCard(p: p, inBoard: true)),
+                              child: ProjectCard(p: p, inBoard: true),
+                            ),
+                          ),
+                        if (items.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Text('Hold a project and drag it here', textAlign: TextAlign.center, style: TextStyle(color: context.mutedText, fontSize: 12.5)),
+                          ),
+                      ]),
+                    ),
                   ]),
-                ),
-                Expanded(
-                  child: ListView(children: [
-                    for (final p in items) Padding(padding: const EdgeInsets.only(bottom: 10), child: ProjectCard(p: p)),
-                    if (items.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.all(18),
-                        child: Text('Hold a project and choose\n“Change status” to move it here', textAlign: TextAlign.center, style: TextStyle(color: context.mutedText, fontSize: 12.5)),
-                      ),
-                  ]),
-                ),
-              ]),
+                );
+              },
             );
           }),
       ],
@@ -348,7 +406,8 @@ class _Board extends StatelessWidget {
 
 class ProjectCard extends StatelessWidget {
   final Project p;
-  const ProjectCard({super.key, required this.p});
+  final bool inBoard;
+  const ProjectCard({super.key, required this.p, this.inBoard = false});
   @override
   Widget build(BuildContext context) {
     final s = context.watch<Store>();
@@ -362,7 +421,7 @@ class ProjectCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProjectDetail(id: p.id))),
-        onLongPress: () => showProjectActions(context, p),
+        onLongPress: inBoard ? null : () => showProjectActions(context, p),
         onSecondaryTap: () => showProjectActions(context, p), // right-click on computers
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           if (p.cover != null)
@@ -374,6 +433,7 @@ class ProjectCard extends StatelessWidget {
             padding: const EdgeInsets.all(14),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
+                Transform.translate(offset: const Offset(-8, 0), child: ProjectCheck(p, size: 20)),
                 IconTile(icon: p.icon, color: p.color, size: 38),
                 const SizedBox(width: 10),
                 Expanded(
@@ -385,6 +445,11 @@ class ProjectCard extends StatelessWidget {
                 ),
                 PriorityBadge(p.priority),
               ]),
+              if (p.description.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(p.description.trim(), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, height: 1.4, color: context.mutedText)),
+                ),
               const SizedBox(height: 10),
               Wrap(spacing: 6, runSpacing: 6, children: [
                 TagChip(s.projectCat(p.category), small: true),
@@ -413,12 +478,19 @@ class ProjectCard extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Row(children: [
-                Text('${tasks.where((t) => t.done).length}/${tasks.length} tasks', style: TextStyle(fontSize: 12, color: context.mutedText, fontWeight: FontWeight.w500)),
+                Text('${tasks.where((t) => t.done).length}/${tasks.length} tasks · ${(pr * 100).round()}%', style: TextStyle(fontSize: 12, color: context.mutedText, fontWeight: FontWeight.w500)),
                 const Spacer(),
-                if (p.deadline != null) ...[
-                  Icon(Icons.event_outlined, size: 13, color: context.mutedText),
+                if (p.start != null || p.deadline != null) ...[
+                  Icon(Icons.event_outlined, size: 13, color: _dueColor(context, p)),
                   const SizedBox(width: 3),
-                  Text(fmtDue(p.deadline!), style: TextStyle(fontSize: 12, color: context.mutedText, fontWeight: FontWeight.w500)),
+                  Flexible(
+                    child: Text(
+                      p.deadline == null ? 'Started ${fmtDue(p.start!)}' : _dueText(p),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: _dueColor(context, p), fontWeight: FontWeight.w600),
+                    ),
+                  ),
                 ],
               ]),
             ]),
@@ -433,7 +505,7 @@ class ProjectCard extends StatelessWidget {
 class ProjectTile extends StatelessWidget {
   final Project p;
   const ProjectTile({super.key, required this.p});
-  static const infoHeight = 138.0;
+  static const infoHeight = 158.0;
   @override
   Widget build(BuildContext context) {
     final s = context.watch<Store>();
@@ -479,17 +551,11 @@ class ProjectTile extends StatelessWidget {
                   child: Center(child: Icon(iconOf(p.icon), size: 54, color: context.isDark ? Colors.white70 : c.fg.withOpacity(0.55))),
                 ),
               Positioned(
-                left: 10,
+                left: 44,
                 right: 10,
                 top: 10,
                 child: Row(children: [
-                  if (cover != null)
-                    Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.92), borderRadius: BorderRadius.circular(10)),
-                      child: Icon(iconOf(p.icon), size: 16, color: c.fg),
-                    ),
+                  const SizedBox(),
                   const Spacer(),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -502,6 +568,7 @@ class ProjectTile extends StatelessWidget {
                   ),
                 ]),
               ),
+              Positioned(left: 0, top: 0, child: Transform.scale(scale: 0.8, child: ProjectCheck(p, onImage: true))),
             ]),
           ),
           SizedBox(
@@ -510,6 +577,13 @@ class ProjectTile extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, decoration: p.done ? TextDecoration.lineThrough : null)),
+                const SizedBox(height: 2),
+                Text(
+                  p.description.trim().isNotEmpty ? p.description.trim() : (p.start != null ? 'Started ${fmtDue(p.start!)}' : 'Added ${fmtDue(p.createdAt)}'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: context.mutedText),
+                ),
                 const SizedBox(height: 5),
                 // category + priority
                 Row(children: [

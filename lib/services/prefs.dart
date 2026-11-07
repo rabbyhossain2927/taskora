@@ -1,3 +1,4 @@
+import 'spell_check.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -49,6 +50,12 @@ class Prefs extends ChangeNotifier {
   set defaultCurrency(String v) => _set('defaultCurrency', v);
   String get defaultPlatform => _get('defaultPlatform', 'fiverr');
   set defaultPlatform(String v) => _set('defaultPlatform', v);
+  bool get spellCheck => _get('spellCheck', true);
+  set spellCheck(bool v) {
+    _set('spellCheck', v);
+    SpellCheck.on = v;
+  }
+
   bool get showMoney => _get('showMoney', true);
   set showMoney(bool v) => _set('showMoney', v);
 
