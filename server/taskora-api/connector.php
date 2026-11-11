@@ -37,9 +37,25 @@ if (isset($_GET['setup'])) {
     reply(200, ['connected' => true, 'url' => $self . '?k=' . $key]);
 }
 
+// ---------- Request log (last 40 calls, no secrets) to help fix connection problems ----------
+(function (): void {
+    $f = __DIR__ . '/cache/connector-log.txt';
+    $line = json_encode([
+        't' => gmdate('c'), 'm' => $_SERVER['REQUEST_METHOD'] ?? '', 'ip' => $_SERVER['REMOTE_ADDR'] ?? '',
+        'key' => isset($_GET['k']) ? 'query' : (auth_token() !== '' ? 'header' : (($_SERVER['PATH_INFO'] ?? '') !== '' ? 'path' : 'none')),
+        'ua' => substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 80),
+        'accept' => substr((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 0, 60),
+        'body' => substr(preg_replace('/"k=[^"]*"/', '', (string) file_get_contents('php://input')), 0, 120),
+    ]);
+    $old = is_file($f) ? array_slice(file($f, FILE_IGNORE_NEW_LINES) ?: [], -39) : [];
+    @file_put_contents($f, implode("\n", array_merge($old, [$line])) . "\n", LOCK_EX);
+})();
+
 // ---------- Who is calling? ----------
 function connector_uid(): string {
+    // The key can come as ?k=KEY, as connector.php/KEY, or as an "Authorization: Bearer KEY" header.
     $key = (string) ($_GET['k'] ?? '');
+    if ($key === '') $key = trim((string) ($_SERVER['PATH_INFO'] ?? ''), '/');
     if ($key === '') $key = auth_token();
     if (!preg_match('/^[a-f0-9]{48}$/', $key)) reply(401, ['error' => 'Connector key is missing or wrong.']);
     try {
