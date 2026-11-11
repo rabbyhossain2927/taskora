@@ -118,7 +118,7 @@ function docs(string $uid, string $col): array {
     $out = [];
     foreach ($q->fetchAll() as $r) {
         $d = json_decode((string) $r['data'], true);
-        if (is_array($d)) $out[(string) $r['doc_id']] = $d;
+        if (is_array($d) && live($d)) $out[(string) $r['doc_id']] = $d;
     }
     return $out;
 }
@@ -128,7 +128,26 @@ function doc(string $uid, string $col, string $id): ?array {
     $q = db()->prepare('SELECT data FROM taskora_docs WHERE uid = ? AND col = ? AND doc_id = ? AND deleted = 0');
     $q->execute([$uid, $col, $id]);
     $d = json_decode((string) $q->fetchColumn(), true);
-    return is_array($d) ? $d : null;
+    return is_array($d) && live($d) ? $d : null;
+}
+
+/** Not in TaskOra's Trash or Archive. */
+function live(array $d): bool { return !isset($d['deletedAt']) && empty($d['archived']); }
+
+/** Same as deleting in the app: goes to TaskOra's Trash (kept 30 days, can be restored). */
+function trash(string $uid, string $col, string $id, array $d, ?string $with = null): void {
+    $d['deletedAt'] = now_ms();
+    if ($with !== null) $d['trashedWith'] = $with;
+    put_doc($uid, $col, $id, $d);
+}
+
+function subtasks_arg($v): array {
+    $out = [];
+    foreach ((array) $v as $s) {
+        if (is_string($s) && trim($s) !== '') $out[] = ['title' => trim($s), 'done' => false];
+        elseif (is_array($s) && is_string($s['title'] ?? null) && trim($s['title']) !== '') $out[] = ['title' => trim($s['title']), 'done' => !empty($s['done'])];
+    }
+    return $out;
 }
 
 function put_doc(string $uid, string $col, string $id, array $data): void {
@@ -141,10 +160,7 @@ function put_doc(string $uid, string $col, string $id, array $data): void {
 function new_todo(array $t, ?string $projectId, int $now): array {
     $title = text_arg($t, 'title', 300);
     if ($title === '') throw new InvalidArgumentException('Every task needs a title.');
-    $subs = [];
-    foreach ((array) ($t['subtasks'] ?? []) as $s) {
-        if (is_string($s) && trim($s) !== '') $subs[] = ['title' => trim($s), 'done' => false];
-    }
+    $subs = subtasks_arg($t['subtasks'] ?? []);
     return [
         'title' => $title, 'notes' => text_arg($t, 'notes', 5000), 'projectId' => $projectId,
         'start' => $now, 'deadline' => to_ms($t['deadline'] ?? null, 'Task deadline'),
@@ -177,8 +193,16 @@ function todo_view(string $id, array $t, array $projects): array {
         'id' => $id, 'title' => $t['title'] ?? '', 'done' => !empty($t['done']),
         'deadline' => from_ms($t['deadline'] ?? null), 'priority' => $t['priority'] ?? 5,
         'project_id' => $pid, 'project' => is_string($pid) ? ($projects[$pid]['title'] ?? null) : null,
-        'notes' => $t['notes'] ?? '',
+        'notes' => $t['notes'] ?? '', 'category' => $t['category'] ?? '',
+        'reminder' => from_ms($t['reminder'] ?? null), 'subtasks' => $t['subtasks'] ?? [],
     ];
+}
+
+function project_view(string $id, array $p): array {
+    return ['id' => $id, 'title' => $p['title'] ?? '', 'description' => $p['description'] ?? '', 'done' => !empty($p['done']),
+        'status' => $p['status'] ?? '', 'priority' => $p['priority'] ?? 3, 'category' => $p['category'] ?? '',
+        'start' => from_ms($p['start'] ?? null), 'deadline' => from_ms($p['deadline'] ?? null), 'reminder' => from_ms($p['reminder'] ?? null),
+        'platform' => $p['platform'] ?? 'direct', 'amount' => $p['amount'] ?? null, 'currency' => $p['currency'] ?? 'USD'];
 }
 
 // ---------- The tools ----------
@@ -241,26 +265,54 @@ function tool_list(): array {
         ],
         [
             'name' => 'update_task',
-            'description' => 'Change one task: mark it done or not done, or change its title, notes, deadline or priority.',
+            'description' => 'Edit one task. Only the fields you send are changed: done, title, notes, deadline, reminder, priority, category, subtasks, or move it to another project.',
             'inputSchema' => ['type' => 'object', 'properties' => [
                 'task_id' => ['type' => 'string'],
                 'done' => ['type' => 'boolean'],
                 'title' => ['type' => 'string'],
                 'notes' => ['type' => 'string'],
                 'deadline' => ['type' => 'string', 'description' => $date . ' Empty text removes the deadline.'],
-                'priority' => ['type' => 'integer'],
+                'reminder' => ['type' => 'string', 'description' => $date . ' Empty text removes the reminder.'],
+                'priority' => ['type' => 'integer', 'description' => '1 urgent .. 5 none.'],
+                'category' => ['type' => 'string'],
+                'subtasks' => ['type' => 'array', 'description' => 'Replaces the whole checklist. Items are text, or {title, done}.', 'items' => ['type' => ['string', 'object']]],
+                'project_id' => ['type' => 'string', 'description' => 'Move the task to this project. Empty text makes it a stand-alone to-do.'],
             ], 'required' => ['task_id']],
         ],
         [
             'name' => 'update_project',
-            'description' => 'Change one project: mark it done or not done, or change its title, description or deadline.',
+            'description' => 'Edit one project. Only the fields you send are changed.',
             'inputSchema' => ['type' => 'object', 'properties' => [
                 'project_id' => ['type' => 'string'],
                 'done' => ['type' => 'boolean'],
                 'title' => ['type' => 'string'],
                 'description' => ['type' => 'string'],
+                'status' => ['type' => 'string', 'enum' => ['todo', 'progress', 'review', 'hold', 'complete', 'cancelled']],
+                'priority' => ['type' => 'integer', 'description' => '1 urgent .. 4 low.'],
+                'category' => ['type' => 'string'],
+                'start' => ['type' => 'string', 'description' => $date],
                 'deadline' => ['type' => 'string', 'description' => $date . ' Empty text removes the deadline.'],
+                'reminder' => ['type' => 'string', 'description' => $date . ' Empty text removes the reminder.'],
+                'platform' => ['type' => 'string', 'enum' => ['direct', 'fiverr', 'upwork']],
+                'amount' => ['type' => 'number'],
+                'currency' => ['type' => 'string'],
             ], 'required' => ['project_id']],
+        ],
+        [
+            'name' => 'delete_task',
+            'description' => 'Delete tasks. They go to TaskOra\'s Trash, where they can be restored for 30 days. Confirm with the owner first.',
+            'inputSchema' => ['type' => 'object', 'properties' => [
+                'task_ids' => ['type' => 'array', 'items' => ['type' => 'string']],
+            ], 'required' => ['task_ids']],
+            'annotations' => ['destructiveHint' => true],
+        ],
+        [
+            'name' => 'delete_project',
+            'description' => 'Delete a project together with its tasks. They go to TaskOra\'s Trash, where they can be restored for 30 days. Confirm with the owner first.',
+            'inputSchema' => ['type' => 'object', 'properties' => [
+                'project_id' => ['type' => 'string'],
+            ], 'required' => ['project_id']],
+            'annotations' => ['destructiveHint' => true],
         ],
     ];
 }
@@ -351,7 +403,15 @@ function tool_call(string $uid, string $name, array $a): array {
             if (array_key_exists('title', $a)) { $v = text_arg($a, 'title', 300); if ($v !== '') $t['title'] = $v; }
             if (array_key_exists('notes', $a)) $t['notes'] = text_arg($a, 'notes', 5000);
             if (array_key_exists('deadline', $a)) $t['deadline'] = to_ms($a['deadline'], 'Task deadline');
+            if (array_key_exists('reminder', $a)) $t['reminder'] = to_ms($a['reminder'], 'Task reminder');
             if (array_key_exists('priority', $a)) $t['priority'] = int_arg($a, 'priority', 1, 5, 5);
+            if (array_key_exists('category', $a)) { $v = text_arg($a, 'category', 40); if ($v !== '') $t['category'] = $v; }
+            if (array_key_exists('subtasks', $a)) $t['subtasks'] = subtasks_arg($a['subtasks']);
+            if (array_key_exists('project_id', $a)) {
+                $pid = (string) ($a['project_id'] ?? '');
+                if ($pid !== '' && doc($uid, 'projects', $pid) === null) throw new InvalidArgumentException('No project with that project_id.');
+                $t['projectId'] = $pid === '' ? null : $pid;
+            }
             if (array_key_exists('done', $a)) {
                 $t['done'] = (bool) $a['done'];
                 $t['completedAt'] = $t['done'] ? ($t['completedAt'] ?? now_ms()) : null;
@@ -365,13 +425,58 @@ function tool_call(string $uid, string $name, array $a): array {
             if ($p === null) throw new InvalidArgumentException('No project with that project_id. Use list_projects to find it.');
             if (array_key_exists('title', $a)) { $v = text_arg($a, 'title', 300); if ($v !== '') $p['title'] = $v; }
             if (array_key_exists('description', $a)) $p['description'] = text_arg($a, 'description', 10000);
+            if (array_key_exists('start', $a)) $p['start'] = to_ms($a['start'], 'Project start');
             if (array_key_exists('deadline', $a)) $p['deadline'] = to_ms($a['deadline'], 'Project deadline');
+            if (array_key_exists('reminder', $a)) $p['reminder'] = to_ms($a['reminder'], 'Project reminder');
+            if (array_key_exists('priority', $a)) $p['priority'] = int_arg($a, 'priority', 1, 4, 3);
+            if (array_key_exists('category', $a)) { $v = text_arg($a, 'category', 40); if ($v !== '') $p['category'] = $v; }
+            if (array_key_exists('platform', $a) && in_array($a['platform'], ['direct', 'fiverr', 'upwork'], true)) $p['platform'] = $a['platform'];
+            if (array_key_exists('amount', $a)) $p['amount'] = is_numeric($a['amount']) ? (float) $a['amount'] : null;
+            if (array_key_exists('currency', $a)) { $v = strtoupper(text_arg($a, 'currency', 8)); if ($v !== '') $p['currency'] = $v; }
+            if (array_key_exists('status', $a) && in_array($a['status'], ['todo', 'progress', 'review', 'hold', 'complete', 'cancelled'], true)) {
+                $p['status'] = $a['status'];
+                $p['done'] = $a['status'] === 'complete';
+            }
             if (array_key_exists('done', $a)) {
                 $p['done'] = (bool) $a['done'];
                 $p['status'] = $p['done'] ? 'complete' : (($p['status'] ?? '') === 'complete' ? 'progress' : ($p['status'] ?? 'todo'));
             }
             put_doc($uid, 'projects', $id, $p);
-            return ['project' => ['id' => $id, 'title' => $p['title'] ?? '', 'done' => !empty($p['done']), 'status' => $p['status'] ?? '', 'deadline' => from_ms($p['deadline'] ?? null)]];
+            return ['project' => project_view($id, $p)];
+
+        case 'delete_task':
+            $ids = $a['task_ids'] ?? null;
+            if (!is_array($ids) || !$ids) throw new InvalidArgumentException('task_ids must be a list of task ids.');
+            if (count($ids) > 100) throw new InvalidArgumentException('At most 100 tasks at a time.');
+            $found = [];
+            foreach ($ids as $tid) {
+                $t = doc($uid, 'todos', (string) $tid);
+                if ($t === null) throw new InvalidArgumentException("No task with id $tid. Nothing was deleted.");
+                $found[(string) $tid] = $t;
+            }
+            $pdo = db();
+            $pdo->beginTransaction();
+            try {
+                foreach ($found as $tid => $t) trash($uid, 'todos', $tid, $t);
+                $pdo->commit();
+            } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
+            return ['moved_to_trash' => array_map(fn($k, $t) => ['id' => $k, 'title' => $t['title'] ?? ''], array_keys($found), $found)];
+
+        case 'delete_project':
+            $id = (string) ($a['project_id'] ?? '');
+            $p = doc($uid, 'projects', $id);
+            if ($p === null) throw new InvalidArgumentException('No project with that project_id. Use list_projects to find it.');
+            $pdo = db();
+            $pdo->beginTransaction();
+            $n = 0;
+            try {
+                trash($uid, 'projects', $id, $p);
+                foreach (docs($uid, 'todos') as $tid => $t) {
+                    if (($t['projectId'] ?? null) === $id) { trash($uid, 'todos', $tid, $t, $id); $n++; }
+                }
+                $pdo->commit();
+            } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
+            return ['moved_to_trash' => ['project' => $p['title'] ?? '', 'tasks' => $n], 'restore' => 'Open Trash in TaskOra within 30 days to restore.'];
     }
     throw new DomainException("Unknown tool: $name");
 }
@@ -392,7 +497,7 @@ function rpc(string $uid, $msg): ?array {
                 'protocolVersion' => in_array($v, MCP_VERSIONS, true) ? $v : MCP_DEFAULT_VERSION,
                 'capabilities' => ['tools' => new stdClass()],
                 'serverInfo' => ['name' => 'TaskOra', 'version' => SERVER_VERSION],
-                'instructions' => 'TaskOra is the owner\'s project and to-do app. Break big work into small tasks with their own deadlines spread before the final deadline. Show the plan and get a yes before saving. Dates are in the owner\'s local time.',
+                'instructions' => 'TaskOra is the owner\'s project and to-do app. Break big work into small tasks with their own deadlines spread before the final deadline. Show the plan and get a yes before saving, and confirm before deleting. Dates are in the owner\'s local time.',
             ]);
         case 'ping':
             return $ok(new stdClass());
