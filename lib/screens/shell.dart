@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'completed_screen.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
@@ -476,6 +477,7 @@ class _Sidebar extends StatelessWidget {
   static const _cal = ('calendar', 'Calendar', Icons.calendar_month_rounded, Color(0xFFFFE6DE), Color(0xFFB8462E));
   static const _focus = ('focus', 'Focus', Icons.timer_rounded, Color(0xFFF2E4FF), Color(0xFF8236C9));
   static const _inbox = ('inbox', 'Notifications', Icons.notifications_rounded, Color(0xFFDDF4F7), Color(0xFF0B7A86));
+  static const _done = ('completed', 'Completed', Icons.task_alt_rounded, Color(0xFFDDF5E8), Color(0xFF1E7A50));
   static const _bin = ('bin', 'Archive & Trash', Icons.inventory_2_rounded, Color(0xFFEEEEF3), Color(0xFF55556A));
 
   @override
@@ -526,6 +528,7 @@ class _Sidebar extends StatelessWidget {
             item(_cal, () => onSide('calendar', const CalendarScreen())),
             item(_focus, onFocus, badge: f.active ? FocusEngine.fmt(f.leftMs) : '', hint: 'Alt+F'),
             item(_inbox, () => onSide('inbox', const NotificationsScreen()), badge: s.unreadCount > 0 ? '${s.unreadCount}' : ''),
+            item(_done, () => onSide('completed', const CompletedScreen())),
             item(_bin, () => onSide('bin', const BinScreen(trash: false))),
           ]),
         ),

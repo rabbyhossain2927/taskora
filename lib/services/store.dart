@@ -240,19 +240,30 @@ class Store extends ChangeNotifier {
     return t.where((x) => x.done).length / t.length;
   }
 
+  bool quietTodo(Todo t) => _quiet(t);
+
   int get unreadCount => notices.where((n) => !n.read).length;
 
   // ---------------- writes ----------------
+  /// No reminders for finished work: a done to-do, or any to-do of a done project.
+  bool _quiet(Todo t) => t.done || (t.projectId != null && projects.any((p) => p.id == t.projectId && p.done));
+
   Future<void> saveProject(Project p) async {
+    if (p.done && p.completedAt == null) p.completedAt = DateTime.now();
+    if (!p.done) p.completedAt = null;
     _put('projects', p.id, p.toMap());
-    await NotifyService.scheduleFor(p.id, p.title, 'Project reminder', p.reminder);
+    await NotifyService.scheduleFor(p.id, p.title, 'Project reminder', p.done ? null : p.reminder);
+    // Finishing (or reopening) a project turns its to-dos' reminders off (or back on).
+    for (final t in todos.where((t) => t.projectId == p.id && t.reminder != null)) {
+      await NotifyService.scheduleFor(t.id, t.title, 'To-do reminder', t.done || p.done ? null : t.reminder);
+    }
   }
 
   Future<void> saveTodo(Todo t) async {
     if (t.done && t.completedAt == null) t.completedAt = DateTime.now();
     if (!t.done) t.completedAt = null;
     _put('todos', t.id, t.toMap());
-    await NotifyService.scheduleFor(t.id, t.title, 'To-do reminder', t.done ? null : t.reminder);
+    await NotifyService.scheduleFor(t.id, t.title, 'To-do reminder', _quiet(t) ? null : t.reminder);
   }
 
   Future<void> toggleTodo(Todo t) {
@@ -322,10 +333,10 @@ class Store extends ChangeNotifier {
     if (m == null) return;
     if (col == 'projects') {
       final p = Project.fromMap(id, m);
-      await NotifyService.scheduleFor(p.id, p.title, 'Project reminder', p.reminder);
+      await NotifyService.scheduleFor(p.id, p.title, 'Project reminder', p.done ? null : p.reminder);
     } else if (col == 'todos') {
       final t = Todo.fromMap(id, m);
-      await NotifyService.scheduleFor(t.id, t.title, 'To-do reminder', t.done ? null : t.reminder);
+      await NotifyService.scheduleFor(t.id, t.title, 'To-do reminder', _quiet(t) ? null : t.reminder);
     }
   }
 

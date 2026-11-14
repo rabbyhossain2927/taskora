@@ -51,10 +51,10 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   Future<void> _reschedule() async {
     final s = context.read<Store>();
     for (final t in s.todos) {
-      await NotifyService.scheduleFor(t.id, t.title, 'To-do reminder', t.done ? null : t.reminder);
+      await NotifyService.scheduleFor(t.id, t.title, 'To-do reminder', s.quietTodo(t) ? null : t.reminder);
     }
     for (final p in s.projects) {
-      await NotifyService.scheduleFor(p.id, p.title, 'Project reminder', p.reminder);
+      await NotifyService.scheduleFor(p.id, p.title, 'Project reminder', p.done ? null : p.reminder);
     }
   }
 

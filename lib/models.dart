@@ -78,6 +78,7 @@ class Project {
   FeePlatform platform;
   double customFee;
   DateTime createdAt;
+  DateTime? completedAt;
   Attachment? cover;
   List<Attachment> files;
 
@@ -99,6 +100,7 @@ class Project {
     this.platform = FeePlatform.direct,
     this.customFee = 15,
     DateTime? createdAt,
+    this.completedAt,
     this.cover,
     List<Attachment>? files,
   })  : createdAt = createdAt ?? DateTime.now(),
@@ -111,7 +113,7 @@ class Project {
         'title': title, 'description': description, 'color': color, 'icon': icon, 'status': status,
         'priority': priority, 'category': category, 'start': _t(start), 'deadline': _t(deadline),
         'reminder': _t(reminder), 'done': done, 'amount': amount, 'currency': currency,
-        'platform': platform.name, 'customFee': customFee, 'createdAt': _t(createdAt),
+        'platform': platform.name, 'customFee': customFee, 'createdAt': _t(createdAt), 'completedAt': _t(completedAt),
         if (cover != null) 'cover': cover!.toMap(),
         'files': files.map((f) => f.toMap()).toList(),
       };
@@ -128,6 +130,7 @@ class Project {
         start: _d(m['start']),
         deadline: _d(m['deadline']),
         reminder: _d(m['reminder']),
+        completedAt: _d(m['completedAt']),
         done: m['done'] ?? false,
         amount: (m['amount'] as num?)?.toDouble(),
         currency: m['currency'] ?? 'USD',

@@ -193,14 +193,7 @@ class _TodoRowState extends State<TodoRow> {
     return Slidable(
       key: ValueKey(t.id),
       endActionPane: ActionPane(motion: const BehindMotion(), extentRatio: 0.26, children: [
-        SlidableAction(
-          onPressed: (_) => deleteTodos(context, [t.id]),
-          backgroundColor: C.red,
-          foregroundColor: Colors.white,
-          icon: Icons.delete_outline_rounded,
-          label: 'Trash',
-          borderRadius: BorderRadius.circular(16),
-        ),
+        swipeAction(onTap: () => deleteTodos(context, [t.id]), icon: Icons.delete_outline_rounded, label: 'Delete', radius: BorderRadius.circular(16)),
       ]),
       startActionPane: ActionPane(motion: const BehindMotion(), extentRatio: 0.26, children: [
         SlidableAction(
@@ -266,7 +259,6 @@ class _TodosScreenState extends State<TodosScreen> {
       'Today': open.where((t) => t.deadline != null && !t.deadline!.isBefore(today) && t.deadline!.isBefore(tomorrow)).toList(),
       'Upcoming': open.where((t) => t.deadline != null && !t.deadline!.isBefore(tomorrow)).toList(),
       'No date': open.where((t) => t.deadline == null).toList(),
-      if (prefs.showCompleted) 'Completed': list.where((t) => t.done).toList(),
     };
     var idx = 0;
 
@@ -278,8 +270,6 @@ class _TodosScreenState extends State<TodosScreen> {
         if (show == 'all' || show == 'today') ('Today', context.selInk, groups['Today']!),
         if (show == 'all' || show == 'upcoming') ('Upcoming', const Color(0xFF4B4B5A), groups['Upcoming']!),
         if (show == 'all') ('No date', const Color(0xFF4B4B5A), groups['No date']!),
-        if (show == 'all') ('Done today', const Color(0xFF4B4B5A), doneToday),
-        if (show == 'done') ('Done', const Color(0xFF4B4B5A), list.where((t) => t.done).toList()),
       ].where((x) => x.$3.isNotEmpty).toList();
       void quickAdd() {
         final t = _add.text.trim();
@@ -294,7 +284,7 @@ class _TodosScreenState extends State<TodosScreen> {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               DeskHead('To-do', subtitle: '${open.length} open${groups['Overdue']!.isEmpty ? '' : ' · ${groups['Overdue']!.length} overdue'} · ${doneToday.length} done today', actions: [
-                DeskSeg<String>(items: const [('all', 'All'), ('today', 'Today'), ('upcoming', 'Upcoming'), ('done', 'Done')], value: show, onChanged: (v) => setState(() => show = v)),
+                DeskSeg<String>(items: const [('all', 'All'), ('today', 'Today'), ('upcoming', 'Upcoming')], value: show, onChanged: (v) => setState(() => show = v)),
                 DeskBtn('New to-do', kind: 'primary', icon: Icons.add_rounded, onTap: () => openEditor(context, const TodoEditor())),
               ]),
               const SizedBox(height: 14),

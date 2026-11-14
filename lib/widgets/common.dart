@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../icons.dart';
@@ -969,3 +970,22 @@ Future<String?> askText(BuildContext context, {required String title, String ini
     ),
   );
 }
+
+
+/// Swipe action with a solid colour and white icon + text (used for Delete in red).
+Widget swipeAction({required VoidCallback onTap, required IconData icon, required String label, Color color = const Color(0xFFE5484D), BorderRadius? radius}) =>
+    CustomSlidableAction(
+      onPressed: (_) => onTap(),
+      backgroundColor: Colors.transparent,
+      foregroundColor: Colors.white,
+      padding: EdgeInsets.zero,
+      child: Container(
+        decoration: BoxDecoration(color: color, borderRadius: radius),
+        alignment: Alignment.center,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: Colors.white, size: 22),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12.5)),
+        ]),
+      ),
+    );

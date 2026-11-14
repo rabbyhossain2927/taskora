@@ -2,7 +2,7 @@
 <resources>
     <!-- Android 12+ system splash -->
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
-        <item name="android:windowSplashScreenBackground">#5B5FEF</item>
+        <item name="android:windowSplashScreenBackground">#7E6CF0</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
         <item name="android:windowBackground">@drawable/launch_background</item>
         <item name="android:forceDarkAllowed">false</item>

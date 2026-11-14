@@ -48,5 +48,24 @@
     });
   </script>
   <script src="flutter_bootstrap.js" async></script>
+<script>
+  // Grammarly and other spell-check add-ons can't line up their red lines with
+  // TaskOra's text (it's drawn, not real page text), so turn them off here.
+  // TaskOra has its own spelling and grammar check.
+  (function () {
+    function off(el) {
+      if (!el || el.dataset.taskoraNoGrammar) return;
+      el.dataset.taskoraNoGrammar = '1';
+      el.setAttribute('data-gramm', 'false');
+      el.setAttribute('data-gramm_editor', 'false');
+      el.setAttribute('data-enable-grammarly', 'false');
+      el.setAttribute('spellcheck', 'false');
+      el.setAttribute('autocorrect', 'off');
+    }
+    new MutationObserver(function () {
+      document.querySelectorAll('textarea, input, [contenteditable]').forEach(off);
+    }).observe(document.documentElement, { childList: true, subtree: true });
+  })();
+</script>
 </body>
 </html>

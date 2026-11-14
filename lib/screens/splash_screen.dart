@@ -30,7 +30,7 @@ class SplashScreen extends StatelessWidget {
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color.lerp(a, Colors.white, 0.12)!, Color.lerp(a, Colors.black, 0.18)!]),
+          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: const [Color(0xFF9A8BF8), Color(0xFF6E5CE6)]),
         ),
         child: Center(
           child: TweenAnimationBuilder<double>(
@@ -39,10 +39,7 @@ class SplashScreen extends StatelessWidget {
             curve: Curves.easeOutBack,
             builder: (_, v, child) => Opacity(opacity: v.clamp(0.0, 1.0), child: Transform.scale(scale: 0.8 + 0.2 * v, child: child)),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Container(
-                decoration: BoxDecoration(borderRadius: BorderRadius.circular(32), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 30, offset: const Offset(0, 12))]),
-                child: const Logo(size: 96),
-              ),
+              Image.asset('assets/logo_white.png', width: 104, height: 104),
               const SizedBox(height: 20),
               const Text('TaskOra', style: TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w700, letterSpacing: -0.6)),
               const SizedBox(height: 4),

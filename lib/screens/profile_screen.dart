@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'stats_screen.dart';
+import 'completed_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -116,12 +118,22 @@ class ProfileScreen extends StatelessWidget {
                   ]),
                 ),
               ),
-              const Label('Storage'),
+              const Label('Your work'),
               FadeIn(
                 index: 4,
                 child: Box(
                   padding: EdgeInsets.zero,
                   child: Column(children: [
+                    RowTile(
+                      icon: Icons.task_alt_rounded,
+                      color: 8,
+                      title: 'Completed',
+                      subtitle: '${s.projects.where((p) => p.done).length} projects · ${s.todos.where((t) => t.done).length} to-dos',
+                      onTap: () => _open(context, const CompletedScreen()),
+                    ),
+                    const Divider(),
+                    RowTile(icon: Icons.insights_rounded, color: 12, title: 'Stats', subtitle: 'Charts for week, month, quarter, year', onTap: () => _open(context, const StatsScreen())),
+                    const Divider(),
                     RowTile(icon: Icons.archive_outlined, color: 10, title: 'Archive', value: s.archived.isEmpty ? null : '${s.archived.length}', onTap: () => _open(context, const BinScreen(trash: false))),
                     const Divider(),
                     RowTile(icon: Icons.delete_outline_rounded, color: 2, title: 'Trash', subtitle: 'Kept for ${Store.trashDays} days', value: s.trash.isEmpty ? null : '${s.trash.length}', onTap: () => _open(context, const BinScreen(trash: true))),
@@ -816,7 +828,6 @@ class PreferencesScreen extends StatelessWidget {
               group('To-do', [
                 DropdownTile<int>(icon: Icons.flag_outlined, color: 2, title: 'Default priority', value: p.defaultPriority.clamp(1, 5), options: [for (var i = 1; i <= 5; i++) (i, priorityName(i))], onChanged: (v) => p.defaultPriority = v),
                 DropdownTile<String>(icon: Icons.alarm, color: 4, title: 'Default reminder', value: p.defaultReminder, options: const [('none', 'None'), ('1h', '1 h before'), ('1d', '1 day before')], onChanged: (v) => p.defaultReminder = v),
-                _switch('Show completed', p.showCompleted, (v) => p.showCompleted = v, icon: Icons.task_alt, color: 8),
               ]),
               group('Projects', [
                 DropdownTile<String>(icon: Icons.payments_outlined, color: 8, title: 'Default currency', value: p.defaultCurrency, options: [for (final c in currencySymbols.keys) (c, c)], onChanged: (v) => p.defaultCurrency = v),

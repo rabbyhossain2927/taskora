@@ -266,14 +266,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           label: n.read ? 'Unread' : 'Read',
           borderRadius: const BorderRadius.horizontal(left: Radius.circular(18)),
         ),
-        SlidableAction(
-          onPressed: (_) => _delete(s, [n.id]),
-          backgroundColor: C.red,
-          foregroundColor: Colors.white,
-          icon: Icons.delete_outline,
-          label: 'Delete',
-          borderRadius: const BorderRadius.horizontal(right: Radius.circular(18)),
-        ),
+        swipeAction(onTap: () => _delete(s, [n.id]), icon: Icons.delete_outline, label: 'Delete', radius: const BorderRadius.horizontal(right: Radius.circular(18))),
       ]),
       child: tile,
     );

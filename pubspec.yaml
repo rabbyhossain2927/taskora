@@ -53,4 +53,5 @@ flutter:
   assets:
     - assets/logo.png
     - assets/logo_full.png
+    - assets/logo_white.png
     - assets/words.txt

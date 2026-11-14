@@ -12,6 +12,7 @@ import '../widgets/desk.dart';
 import 'project_detail.dart';
 import 'project_editor.dart';
 import 'todo_editor.dart';
+import 'completed_screen.dart';
 
 /// Mark a project done (or open again) and tell the user, with Undo.
 void setProjectDone(BuildContext context, Project p, bool done) {
@@ -47,7 +48,7 @@ Future<void> pickProjectStatus(BuildContext context, Project p) async {
   final v = await pickOne<String>(context, title: 'Status', current: p.status, options: [for (final t in s.statuses) (t.key, t.label)]);
   if (v == null) return;
   p.status = v;
-  p.done = v == 'complete';
+  if (v != 'complete') p.done = false; // Complete status alone doesn't finish it: tick the box.
   s.saveProject(p);
 }
 
@@ -126,7 +127,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     final active = s.projects.where((p) => !p.done).toList();
     final done = s.projects.where((p) => p.done).toList();
     if (deskWide(context)) {
-      final shown = switch (fStatus) { 'all' => [...active, ...done], 'done' => done, _ => active.where((p) => p.status == fStatus).toList() };
+      final shown = fStatus == 'all' ? active : active.where((p) => p.status == fStatus).toList();
       final money = <String, double>{};
       for (final p in s.projects.where((p) => (p.amount ?? 0) > 0)) {
         money[p.currency] = (money[p.currency] ?? 0) + p.net;
@@ -161,10 +162,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16),
                   child: Wrap(spacing: 8, runSpacing: 8, children: [
-                    DeskFilter('All · ${s.projects.length}', on: fStatus == 'all', onTap: () => setState(() => fStatus = 'all')),
+                    DeskFilter('All · ${active.length}', on: fStatus == 'all', onTap: () => setState(() => fStatus = 'all')),
                     for (final st in s.statuses)
                       if (st.key != 'complete' && active.any((p) => p.status == st.key)) DeskFilter('${st.label} · ${active.where((p) => p.status == st.key).length}', on: fStatus == st.key, onTap: () => setState(() => fStatus = st.key)),
-                    if (done.isNotEmpty) DeskFilter('Completed · ${done.length}', on: fStatus == 'done', onTap: () => setState(() => fStatus = 'done')),
                   ]),
                 ),
               Expanded(
@@ -220,29 +220,20 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                               child: Text(grid ? 'Tap to open · hold for options' : 'Swipe right to complete · hold for options', style: TextStyle(fontSize: 11.5, color: context.mutedText)),
                             ),
                           cards(active),
-                          if (done.isNotEmpty) ...[
-                            const SizedBox(height: 6),
+                          if (done.isNotEmpty)
                             InkWell(
                               borderRadius: BorderRadius.circular(14),
-                              onTap: () => setState(() => showDone = !showDone),
+                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CompletedScreen())),
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
                                 child: Row(children: [
-                                  AnimatedRotation(turns: showDone ? 0.25 : 0, duration: const Duration(milliseconds: 200), child: Icon(Icons.chevron_right_rounded, color: context.mutedText)),
-                                  const SizedBox(width: 4),
-                                  Icon(Icons.task_alt_rounded, size: 18, color: C.green),
+                                  const Icon(Icons.task_alt_rounded, size: 18, color: C.green),
                                   const SizedBox(width: 8),
-                                  Text('Completed · ${done.length}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5)),
+                                  Expanded(child: Text('Completed · ${done.length}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5))),
+                                  Icon(Icons.chevron_right_rounded, color: context.mutedText),
                                 ]),
                               ),
                             ),
-                            AnimatedSize(
-                              duration: const Duration(milliseconds: 250),
-                              curve: Curves.easeOutCubic,
-                              alignment: Alignment.topCenter,
-                              child: showDone ? cards(done, faded: true) : const SizedBox(width: double.infinity),
-                            ),
-                          ],
                         ]),
                       ),
           ),
@@ -283,14 +274,7 @@ class _SwipeProject extends StatelessWidget {
           ],
         ),
         endActionPane: ActionPane(motion: const BehindMotion(), extentRatio: 0.28, children: [
-          SlidableAction(
-            onPressed: (_) => deleteProject(context, p),
-            backgroundColor: C.red,
-            foregroundColor: Colors.white,
-            icon: Icons.delete_outline_rounded,
-            label: 'Trash',
-            borderRadius: BorderRadius.circular(22),
-          ),
+          swipeAction(onTap: () => deleteProject(context, p), icon: Icons.delete_outline_rounded, label: 'Delete', radius: BorderRadius.circular(22)),
         ]),
         child: ProjectCard(p: p),
       );
@@ -335,7 +319,7 @@ class _BoardState extends State<_Board> {
       children: [
         for (final st in store.statuses)
           Builder(builder: (context) {
-            final items = store.projects.where((p) => p.status == st.key).toList();
+            final items = store.projects.where((p) => p.status == st.key && !p.done).toList();
             final pc = pastel(st.color);
             return DragTarget<Project>(
               onWillAcceptWithDetails: (d) {
@@ -347,7 +331,6 @@ class _BoardState extends State<_Board> {
                 setState(() => over = null);
                 final p = d.data;
                 p.status = st.key;
-                p.done = st.key == 'complete';
                 store.saveProject(p);
                 HapticFeedback.lightImpact();
               },
@@ -848,7 +831,6 @@ class _DeskBoardState extends State<_DeskBoard> {
   void _move(Project p, String status) {
     if (p.status == status) return;
     p.status = status;
-    p.done = status == 'complete';
     widget.store.saveProject(p);
   }
 
@@ -859,7 +841,7 @@ class _DeskBoardState extends State<_DeskBoard> {
     return ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.only(bottom: 20), children: [
       for (final st in s.statuses)
         Builder(builder: (context) {
-          final list = s.projects.where((p) => p.status == st.key).toList();
+          final list = s.projects.where((p) => p.status == st.key && !p.done).toList();
           final pc = pastel(st.color);
           return Padding(
             padding: const EdgeInsets.only(right: 16),
