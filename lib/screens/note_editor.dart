@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../services/spell_check.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart' hide Text;
 import 'package:http/http.dart' as http;
@@ -53,6 +54,8 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    SpellCheck.clearGrammar();
+    SpellCheck.changed.addListener(_onMarks);
     store = context.read<Store>();
     final ex = widget.id == null ? null : store.notes.where((x) => x.id == widget.id).firstOrNull;
     isNew = ex == null;
@@ -83,11 +86,19 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     }
   }
 
+  // The fix bar shows when you tap a marked word, not while you're typing one.
+  DateTime _typedAt = DateTime(2000);
+
+  void _onMarks() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
     // Inside the Notes page there is no "back", so save when switching notes.
     if (widget.onClose != null) _save(final_: true);
     WidgetsBinding.instance.removeObserver(this);
+    SpellCheck.changed.removeListener(_onMarks);
     _debounce?.cancel();
     for (final s in _subs) {
       s.cancel();
@@ -159,6 +170,8 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
           b.body = jsonEncode(ops);
           b.text = deltaToMarks(ops);
           _changed();
+          SpellCheck.checkGrammarSoon(c.document.toPlainText());
+          _typedAt = DateTime.now();
         }));
         // Keep the toolbar (undo, styles) up to date.
         c.addListener(() {
@@ -612,6 +625,56 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                   ],
                 ),
               ),
+              // ---------- spelling / grammar fix bar ----------
+              if (fc != null && focused != null && fc.selection.isCollapsed && (_nodes[focused!]?.hasFocus ?? false) && DateTime.now().difference(_typedAt).inMilliseconds > 700)
+                Builder(builder: (context) {
+                  final plain = fc.document.toPlainText();
+                  final issue = SpellCheck.issueAt(plain, fc.selection.baseOffset);
+                  if (issue == null) return const SizedBox.shrink();
+                  final col = issue.grammar ? const Color(0xFF3E7BFA) : const Color(0xFFE5484D);
+                  void fix(String w) {
+                    fc.replaceText(issue.start, issue.length, w, TextSelection.collapsed(offset: issue.start + w.length));
+                    if (issue.grammar) SpellCheck.ignore(issue.word);
+                  }
+                  Widget pill(String t, VoidCallback onTap, {bool main = false}) => Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Material(
+                          color: main ? col : (context.isDark ? Colors.white10 : const Color(0xFFF3F1FA)),
+                          borderRadius: BorderRadius.circular(99),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(99),
+                            onTap: onTap,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                              child: Text(t, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: main ? Colors.white : null)),
+                            ),
+                          ),
+                        ),
+                      );
+                  return TextFieldTapRegion(
+                    child: Container(
+                      decoration: BoxDecoration(color: context.surface, border: Border(top: BorderSide(color: col.withOpacity(0.35), width: 1.5))),
+                      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                      child: Row(children: [
+                        Icon(issue.grammar ? Icons.edit_note_rounded : Icons.spellcheck_rounded, size: 18, color: col),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(children: [
+                              if (issue.grammar)
+                                Padding(padding: const EdgeInsets.only(right: 8), child: Text(issue.message, style: TextStyle(fontSize: 12.5, color: context.mutedText))),
+                              if (issue.fixes.isEmpty) Padding(padding: const EdgeInsets.only(right: 8), child: Text('No suggestions', style: TextStyle(fontSize: 12.5, color: context.mutedText))),
+                              for (var k = 0; k < issue.fixes.length; k++) pill(issue.fixes[k], () => fix(issue.fixes[k]), main: k == 0),
+                              if (!issue.grammar) pill('Add to dictionary', () => SpellCheck.addWord(issue.word)),
+                              pill('Ignore', () => SpellCheck.ignore(issue.word)),
+                            ]),
+                          ),
+                        ),
+                      ]),
+                    ),
+                  );
+                }),
               // ---------- toolbar ----------
               TextFieldTapRegion(
                 child: Container(
