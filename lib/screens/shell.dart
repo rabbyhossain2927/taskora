@@ -1,3 +1,6 @@
+import '../services/home_widgets.dart';
+import 'package:home_widget/home_widget.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'completed_screen.dart';
 import 'package:flutter/services.dart';
@@ -67,14 +70,67 @@ class ShellState extends State<Shell> with WidgetsBindingObserver, SingleTickerP
         await NotifyService.requestPermission();
       } catch (_) {}
       if (!mounted) return;
+      _startWidgets();
       UpdatePrompt.checkInBackground(context);
       await Future.delayed(const Duration(seconds: 4));
       if (mounted) BackupService.runAutoBackups(context.read<Store>());
     });
   }
 
+  // ---------- home screen widgets (Android) ----------
+  StreamSubscription<Uri?>? _widgetTaps;
+  Store? _ws;
+  FocusService? _wf;
+  void _widgetsChanged() {
+    if (_ws != null && _wf != null) HomeWidgets.refreshSoon(_ws!, _wf!);
+  }
+
+  void _startWidgets() {
+    if (!HomeWidgets.supported) return;
+    _ws = context.read<Store>()..addListener(_widgetsChanged);
+    _wf = context.read<FocusService>()..addListener(_widgetsChanged);
+    _widgetsChanged();
+    HomeWidget.initiallyLaunchedFromHomeWidget().then(_onWidgetTap);
+    _widgetTaps = HomeWidget.widgetClicked.listen(_onWidgetTap);
+  }
+
+  /// A widget was tapped: do what its link says.
+  void _onWidgetTap(Uri? u) {
+    if (u == null || !mounted) return;
+    final s = context.read<Store>();
+    final path = '${u.host}${u.path}';
+    switch (path) {
+      case 'todo/done':
+        final t = s.todos.where((x) => x.id == u.queryParameters['id']).firstOrNull;
+        if (t != null && !t.done) {
+          s.toggleTodo(t);
+          showUndo(context, '“${t.title}” done', () => s.toggleTodo(t));
+        }
+        go(2);
+      case 'add/todo':
+        _add(const TodoEditor());
+      case 'add/note':
+        _add(const NoteEditor());
+      case 'add/project':
+        _add(const ProjectEditor());
+      case 'focus':
+        _openFocus();
+      case 'note':
+        open(NoteEditor(id: u.queryParameters['id']));
+      case 'notes':
+        go(3);
+      case 'todos':
+        go(2);
+      default:
+        go(0);
+    }
+  }
+
   @override
   void dispose() {
+    _widgetTaps?.cancel();
+    _ws?.removeListener(_widgetsChanged);
+    _wf?.removeListener(_widgetsChanged);
     WidgetsBinding.instance.removeObserver(this);
     fade.dispose();
     tabN.dispose();

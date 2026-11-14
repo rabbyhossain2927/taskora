@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="@drawable/widget_bg" android:orientation="horizontal" android:padding="8dp">
+    <LinearLayout android:id="@+id/qa_todo" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+        android:orientation="vertical" android:gravity="center">
+        <TextView android:layout_width="44dp" android:layout_height="44dp" android:background="@drawable/widget_tile_green"
+            android:gravity="center" android:text="+" android:textColor="#2FA36B" android:textSize="22sp" android:textStyle="bold" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp"
+            android:text="To-do" android:textColor="#2A2A3A" android:textSize="11.5sp" android:textStyle="bold" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/qa_note" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+        android:orientation="vertical" android:gravity="center">
+        <TextView android:layout_width="44dp" android:layout_height="44dp" android:background="@drawable/widget_tile_amber"
+            android:gravity="center" android:text="+" android:textColor="#C98A12" android:textSize="22sp" android:textStyle="bold" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp"
+            android:text="Note" android:textColor="#2A2A3A" android:textSize="11.5sp" android:textStyle="bold" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/qa_project" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+        android:orientation="vertical" android:gravity="center">
+        <TextView android:layout_width="44dp" android:layout_height="44dp" android:background="@drawable/widget_tile_pink"
+            android:gravity="center" android:text="+" android:textColor="#C2306F" android:textSize="22sp" android:textStyle="bold" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp"
+            android:text="Project" android:textColor="#2A2A3A" android:textSize="11.5sp" android:textStyle="bold" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/qa_focus" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+        android:orientation="vertical" android:gravity="center">
+        <TextView android:layout_width="44dp" android:layout_height="44dp" android:background="@drawable/widget_tile_violet"
+            android:gravity="center" android:text="+" android:textColor="#9B4FD6" android:textSize="22sp" android:textStyle="bold" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp"
+            android:text="Focus" android:textColor="#2A2A3A" android:textSize="11.5sp" android:textStyle="bold" />
+    </LinearLayout>
+</LinearLayout>

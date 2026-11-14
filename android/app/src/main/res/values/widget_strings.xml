@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_ring_desc">Today ring — how much of today is done</string>
+    <string name="widget_todos_desc">Today’s to-dos — tap one to tick it</string>
+    <string name="widget_focus_desc">Focus timer</string>
+    <string name="widget_quickadd_desc">Quick add a to-do, note, project or focus</string>
+    <string name="widget_dashboard_desc">Your day at a glance</string>
+    <string name="widget_note_desc">Your pinned note</string>
+    <string name="widget_streak_desc">Your day streak</string>
+</resources>

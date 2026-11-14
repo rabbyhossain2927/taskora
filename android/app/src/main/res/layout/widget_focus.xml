@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="@drawable/widget_bg_focus" android:orientation="vertical" android:padding="14dp">
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Focus"
+        android:textColor="#E6FFFFFF" android:textSize="13sp" android:textStyle="bold" />
+    <TextView android:id="@+id/state" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:textColor="#CCFFFFFF" android:textSize="11.5sp" android:maxLines="1" android:ellipsize="end" />
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <TextView android:id="@+id/time" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="bottom"
+            android:textColor="#FFFFFF" android:textSize="36sp" android:textStyle="bold" />
+        <Chronometer android:id="@+id/chrono" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="bottom"
+            android:textColor="#FFFFFF" android:textSize="36sp" android:textStyle="bold" android:visibility="gone" />
+    </FrameLayout>
+    <TextView android:id="@+id/start" android:layout_width="match_parent" android:layout_height="34dp" android:layout_marginTop="8dp"
+        android:background="@drawable/widget_pill_white" android:gravity="center" android:text="Start"
+        android:textColor="#6E5CE6" android:textSize="13sp" android:textStyle="bold" />
+</LinearLayout>
