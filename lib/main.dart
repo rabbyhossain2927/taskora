@@ -92,9 +92,9 @@ class TaskOraApp extends StatelessWidget {
       ],
       supportedLocales: const [Locale('en')],
       builder: (context, child) {
-        // Archivo is a wide font: show all text a little smaller.
+        // Text a touch smaller than the system size, for a calm, compact look.
         final mq = MediaQuery.of(context);
-        final scaled = MediaQuery(data: mq.copyWith(textScaler: TextScaler.linear((mq.textScaler.scale(14) / 14) * 0.94)), child: child!);
+        final scaled = MediaQuery(data: mq.copyWith(textScaler: TextScaler.linear((mq.textScaler.scale(14) / 14) * 0.97)), child: child!);
         return user == null
             ? scaled
             : ChangeNotifierProvider<Store>(

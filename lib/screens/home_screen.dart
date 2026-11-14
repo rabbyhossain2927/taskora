@@ -123,7 +123,14 @@ class HomeScreen extends StatelessWidget {
     ];
     final left = <Widget>[
           // ---------- today ----------
-          FadeIn(index: i++, child: _TodayCard(total: total, done: doneToday, due: dueToday.length, active: active.length, notes: s.notes.length)),
+          // Tap the Today card for your stats.
+          FadeIn(
+            index: i++,
+            child: GestureDetector(
+              onTap: () => _open(context, const StatsScreen()),
+              child: _TodayCard(total: total, done: doneToday, due: dueToday.length, active: active.length, notes: s.notes.length),
+            ),
+          ),
           const SizedBox(height: 12),
 
           // ---------- due today ----------
@@ -181,18 +188,9 @@ class HomeScreen extends StatelessWidget {
             ),
           ],
 
-          // ---------- stats + focus ----------
+          // ---------- focus ----------
           const SizedBox(height: 14),
-          FadeIn(
-            index: i++,
-            child: IntrinsicHeight(
-              child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Expanded(child: _StatsTile(store: s, onTap: () => _open(context, const StatsScreen()))),
-                const SizedBox(width: 12),
-                Expanded(child: _FocusTile(minutes: prefs.focusMinutes, onTap: () => _open(context, const FocusScreen()))),
-              ]),
-            ),
-          ),
+          FadeIn(index: i++, child: _FocusTile(minutes: prefs.focusMinutes, onTap: () => _open(context, const FocusScreen()))),
 
           // ---------- notes ----------
           if (prefs.showNotesOnHome && homeSections.isNotEmpty) ...[
@@ -354,6 +352,7 @@ class _StatsTile extends StatelessWidget {
   }
 }
 
+/// Big focus card: time, what you're on, Start / Pause right here.
 class _FocusTile extends StatelessWidget {
   final int minutes;
   final VoidCallback onTap;
@@ -362,39 +361,64 @@ class _FocusTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final a = context.accent;
     final f = context.watch<FocusService>();
-    return Material(
-      borderRadius: BorderRadius.circular(22),
-      clipBehavior: Clip.antiAlias,
-      child: Ink(
-        decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [context.tint, Color.lerp(context.tint, a, 0.25)!])),
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Icon(Icons.timer_outlined, size: 18, color: context.onTint),
-                const SizedBox(width: 6),
-                Expanded(child: Text('Focus', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: context.onTint))),
+    final sum = f.summary;
+    Widget btn(String t, IconData? ic, VoidCallback onPress, {bool main = true}) => Material(
+          color: main ? Colors.white : Colors.white.withOpacity(0.22),
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: onPress,
+            child: Container(
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              alignment: Alignment.center,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (ic != null) ...[Icon(ic, size: 20, color: main ? a : Colors.white), const SizedBox(width: 6)],
+                Text(t, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: main ? a : Colors.white)),
               ]),
-              const SizedBox(height: 4),
-              Text(f.active ? '${FocusEngine.fmt(f.leftMs)} left${f.paused ? ' · paused' : ''}' : '$minutes min · no distractions', style: TextStyle(fontSize: 11.5, color: context.onTint.withOpacity(0.75), fontWeight: f.active ? FontWeight.w700 : FontWeight.w400)),
-              const Spacer(),
-              const SizedBox(height: 8),
-              Row(children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                  decoration: BoxDecoration(color: a, borderRadius: BorderRadius.circular(12)),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(f.active ? Icons.timer_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 16),
-                    const SizedBox(width: 4),
-                    Text(f.active ? 'Open' : 'Start', style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
-              ]),
-            ]),
+            ),
           ),
+        );
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(26),
+          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color.lerp(a, Colors.white, 0.18)!, Color.lerp(a, const Color(0xFFE48BD0), 0.35)!]),
+          boxShadow: [BoxShadow(color: a.withOpacity(0.28), blurRadius: 22, offset: const Offset(0, 10))],
         ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            const Icon(Icons.timer_outlined, color: Colors.white, size: 20),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('Focus', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16))),
+            Text('${sum.$1} today · ${sum.$2 >= 60 ? '${sum.$2 ~/ 60}h ' : ''}${sum.$2 % 60}m', style: const TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w600)),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+            f.active ? FocusEngine.fmt(f.leftMs) : '$minutes:00',
+            style: const TextStyle(color: Colors.white, fontSize: 56, fontWeight: FontWeight.w800, letterSpacing: -2, height: 1.1, fontFeatures: [FontFeature.tabularFigures()]),
+          ),
+          Text(
+            f.active ? (f.paused ? 'Paused${f.label.isEmpty ? '' : ' · ${f.label}'}' : (f.label.isEmpty ? 'Stay with it' : 'Working on · ${f.label}')) : 'No distractions, one thing at a time',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+          const SizedBox(height: 14),
+          Row(children: [
+            Expanded(
+              child: f.running
+                  ? btn('Pause', Icons.pause_rounded, f.pause)
+                  : f.paused
+                      ? btn('Resume', Icons.play_arrow_rounded, f.resume)
+                      : btn('Start', Icons.play_arrow_rounded, onTap),
+            ),
+            const SizedBox(width: 8),
+            f.active ? btn('Stop', null, f.stop, main: false) : btn('Options', null, onTap, main: false),
+          ]),
+        ]),
       ),
     );
   }

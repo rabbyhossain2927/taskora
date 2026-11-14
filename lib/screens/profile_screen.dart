@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'photo_crop.dart';
 import 'stats_screen.dart';
 import 'completed_screen.dart';
 import 'package:intl/intl.dart';
@@ -46,7 +47,20 @@ class ProfileScreen extends StatelessWidget {
               FadeIn(
                 child: Column(children: [
                   Stack(children: [
-                    const Avatar(size: 92),
+                    GestureDetector(onTap: () => changeProfilePhoto(context), child: const Avatar(size: 92)),
+                    Positioned(
+                      left: 0,
+                      bottom: 2,
+                      child: GestureDetector(
+                        onTap: () => changeProfilePhoto(context),
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(color: context.accent, shape: BoxShape.circle, border: Border.all(color: Theme.of(context).canvasColor, width: 3)),
+                          child: const Icon(Icons.edit_rounded, size: 13, color: Colors.white),
+                        ),
+                      ),
+                    ),
                     Positioned(
                       right: 2,
                       bottom: 2,
@@ -451,7 +465,7 @@ class _DesktopAccountState extends State<_DesktopAccount> {
       child: Row(children: [
         Container(
           decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: _dark ? Colors.white12 : Colors.white, width: 4)),
-          child: const Avatar(size: 72, ring: false),
+          child: Tooltip(message: 'Change photo', child: GestureDetector(onTap: () => changeProfilePhoto(context), child: const MouseRegion(cursor: SystemMouseCursors.click, child: Avatar(size: 72, ring: false)))),
         ),
         const SizedBox(width: 18),
         Expanded(

@@ -720,8 +720,14 @@ class Avatar extends StatelessWidget {
   final double size;
   final bool ring;
   const Avatar({super.key, this.size = 44, this.ring = true});
+
+  /// Bumped after the profile photo changes, so every avatar redraws.
+  static final changed = ValueNotifier<int>(0);
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(valueListenable: changed, builder: (context, _, __) => _build(context));
+
+  Widget _build(BuildContext context) {
     final u = FirebaseAuth.instance.currentUser;
     final name = (u?.displayName?.trim().isNotEmpty ?? false) ? u!.displayName! : (u?.email ?? 'You');
     final initials = name.trim().split(RegExp(r'\s+')).take(2).map((w) => w.isEmpty ? '' : w[0].toUpperCase()).join();

@@ -47,6 +47,8 @@ class FileService {
     return out;
   }
 
+  static Future<Attachment> uploadBytes(List<int> bytes, String name) => _send(http.MultipartFile.fromBytes('file', bytes, filename: name), name);
+
   static Future<Attachment> upload(File file, String name) async => _send(await http.MultipartFile.fromPath('file', file.path, filename: name), name);
 
   static Future<Attachment> _send(http.MultipartFile part, String name) async {

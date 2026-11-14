@@ -6,8 +6,8 @@ class C {
   static const purple = Color(0xFF5B5FEF);
   static const purpleDark = Color(0xFF4A4ED6);
   static const tint = Color(0xFFECEDFD);
-  static const bg = Color(0xFFF6F6FA);
-  static const ink = Color(0xFF16161D);
+  static const bg = Color(0xFFF9F8FD);
+  static const ink = Color(0xFF2A2A3A); // soft ink, not pure black
   static const muted = Color(0xFF6E6E7C);
   static const line = Color(0xFFECECF2);
   static const green = Color(0xFF1E8A5A);
@@ -69,8 +69,10 @@ Color noteColor(int i) => noteColors[i.clamp(0, noteColors.length - 1)];
 /// App-wide colour themes. Everything else (tints, glow, nav) is derived from the accent.
 class AppThemeOption {
   final String name;
-  final Color accent;
-  const AppThemeOption(this.name, this.accent);
+  final Color base;
+  const AppThemeOption(this.name, this.base);
+  // A touch lighter than the base colour for a softer, brighter look.
+  Color get accent => Color.lerp(base, Colors.white, 0.14)!;
   Color get tint => Color.lerp(accent, Colors.white, 0.88)!;
   Color get glow => Color.lerp(accent, Colors.white, 0.80)!;
   // Kept for older screens that read these
@@ -148,7 +150,7 @@ const bgStyles = <(String, String)>[
   ('plain', 'Plain'),
 ];
 
-/// Text sizes (Archivo is wide, so everything is a touch smaller).
+/// Text sizes.
 class T {
   static const display = 24.0;
   static const title = 20.0;
@@ -173,7 +175,7 @@ ThemeData buildTheme(AppThemeOption t, Brightness b, {String bgStyle = 'glow'}) 
     onPrimaryContainer: dark ? Colors.white : Color.lerp(t.accent, Colors.black, 0.25),
   );
   final base = ThemeData(useMaterial3: true, colorScheme: scheme, brightness: b);
-  final text = GoogleFonts.archivoTextTheme(base.textTheme).apply(bodyColor: ink, displayColor: ink);
+  final text = GoogleFonts.manropeTextTheme(base.textTheme).apply(bodyColor: ink, displayColor: ink);
   final snack = dark ? Color.lerp(t.accent, Colors.black, 0.35)! : Color.lerp(t.accent, Colors.black, 0.18)!;
   return base.copyWith(
     // Pages are transparent; AppBackground paints the colour + style behind each page.
@@ -193,7 +195,7 @@ ThemeData buildTheme(AppThemeOption t, Brightness b, {String bgStyle = 'glow'}) 
       behavior: SnackBarBehavior.floating,
       backgroundColor: snack,
       elevation: 6,
-      contentTextStyle: GoogleFonts.archivo(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 13.5),
+      contentTextStyle: GoogleFonts.manrope(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 13.5),
       actionTextColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
@@ -213,7 +215,7 @@ ThemeData buildTheme(AppThemeOption t, Brightness b, {String bgStyle = 'glow'}) 
         foregroundColor: Colors.white,
         minimumSize: const Size.fromHeight(50),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        textStyle: GoogleFonts.archivo(fontWeight: FontWeight.w600, fontSize: 14.5),
+        textStyle: GoogleFonts.manrope(fontWeight: FontWeight.w600, fontSize: 14.5),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -221,10 +223,10 @@ ThemeData buildTheme(AppThemeOption t, Brightness b, {String bgStyle = 'glow'}) 
         foregroundColor: ink,
         side: BorderSide(color: dark ? Colors.white24 : const Color(0xFFDCDCE6)),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        textStyle: GoogleFonts.archivo(fontWeight: FontWeight.w600, fontSize: 14),
+        textStyle: GoogleFonts.manrope(fontWeight: FontWeight.w600, fontSize: 14),
       ),
     ),
-    textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(textStyle: GoogleFonts.archivo(fontWeight: FontWeight.w600, fontSize: 13.5))),
+    textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(textStyle: GoogleFonts.manrope(fontWeight: FontWeight.w600, fontSize: 13.5))),
     bottomSheetTheme: BottomSheetThemeData(
       backgroundColor: surface,
       surfaceTintColor: Colors.transparent,

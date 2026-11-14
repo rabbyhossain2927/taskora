@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:simple_icons/simple_icons.dart';
 
 /// Icons are saved by name so the app never stores raw code points
 /// (that keeps release builds small and safe).
@@ -9,6 +10,26 @@ class IconGroup {
 }
 
 const iconGroups = <IconGroup>[
+  IconGroup('Freelance', {
+    'fiverr': SimpleIcons.fiverr, 'upwork': SimpleIcons.upwork, 'invoice2': Icons.request_quote_outlined,
+    'client_person': Icons.person_pin_outlined, 'order': Icons.local_mall_outlined, 'delivery': Icons.local_shipping_outlined,
+    'revision': Icons.history_edu_outlined, 'gig': Icons.storefront, 'contract': Icons.history_edu, 'paid': Icons.paid_outlined,
+    'review_star': Icons.star_outline_rounded, 'chat_client': Icons.forum_outlined,
+  }),
+  IconGroup('Projects & tasks', {
+    'kanban': Icons.view_kanban_outlined, 'milestone': Icons.flag_circle_outlined, 'sprint': Icons.directions_run,
+    'design': Icons.design_services_outlined,
+    'deadline': Icons.alarm_on, 'subtask': Icons.account_tree_outlined, 'todo_list': Icons.format_list_bulleted,
+    'approval': Icons.approval_outlined, 'feedback2': Icons.feedback_outlined, 'launch': Icons.rocket,
+    'roadmap': Icons.route_outlined, 'goal': Icons.emoji_events_outlined, 'focus2': Icons.center_focus_strong_outlined,
+    'priority2': Icons.low_priority, 'calendar_task': Icons.event_available_outlined, 'repeat2': Icons.event_repeat_outlined,
+  }),
+  IconGroup('Notes', {
+    'note2': Icons.sticky_note_2_outlined, 'notebook': Icons.menu_book_outlined, 'journal': Icons.book_outlined,
+    'draft': Icons.edit_note, 'bookmark2': Icons.bookmark_border, 'docs': Icons.description_outlined, 'idea2': Icons.tips_and_updates_outlined,
+    'link2': Icons.link,
+    'checklist2': Icons.fact_check_outlined, 'summary': Icons.summarize_outlined, 'research': Icons.manage_search,
+  }),
   IconGroup('Work', {
     'work': Icons.work_outline, 'business': Icons.business_center, 'briefcase': Icons.cases_outlined,
     'apartment': Icons.apartment, 'badge': Icons.badge_outlined, 'assignment': Icons.assignment_outlined,

@@ -2,23 +2,29 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../icons.dart';
+import '../models.dart';
 import '../services/focus_service.dart';
 import '../services/store.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/desk.dart';
 
-/// Stats: completed to-dos, completion, streak, earnings, projects by status
-/// and categories. Week / Month / Year, or any From–To range.
+/// Stats: what you finished, added and focused on, with charts.
+/// Week / Month / Quarter / Year, or any From–To range; compared with the
+/// same length of time just before.
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key});
   @override
   State<StatsScreen> createState() => _StatsScreenState();
 }
 
+// Chart colours (soft, readable on white and dark).
+const _violet = Color(0xFF8B7CF6), _pink = Color(0xFFF49AC1), _teal = Color(0xFF5FC8B8), _amber = Color(0xFFF6C36B);
+const _blue = Color(0xFF9CC3FF), _green = Color(0xFF8FDDB4), _grey = Color(0xFFD9D6E6), _rose = Color(0xFFF7C7E0);
+const _chartCols = [_violet, _teal, _amber, _pink, _blue, _green, _rose, _grey];
+
 class _StatsScreenState extends State<StatsScreen> {
-  String period = 'week';
+  String period = 'month';
   DateTimeRange? custom;
 
   Future<void> _pickRange() async {
@@ -42,508 +48,473 @@ class _StatsScreenState extends State<StatsScreen> {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<Store>();
-    final focus = context.watch<FocusService>();
+    final f = context.watch<FocusService>();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final dark = context.isDark;
-    final a = context.accent;
-    final pal = softPalette(a, 8, dark: dark);
+    final muted = context.mutedText;
 
-    // ---------- buckets for the bar chart ----------
-    late List<DateTime> starts;
-    late List<String> labels;
-    late DateTime rangeEnd; // exclusive
+    // ---------- the time range and its buckets ----------
+    late DateTime from, to; // to = exclusive
     if (period == 'custom' && custom != null) {
-      final from = DateTime(custom!.start.year, custom!.start.month, custom!.start.day);
-      rangeEnd = DateTime(custom!.end.year, custom!.end.month, custom!.end.day).add(const Duration(days: 1));
-      final days = rangeEnd.difference(from).inDays;
-      if (days <= 14) {
-        starts = [for (var i = 0; i < days; i++) from.add(Duration(days: i))];
-        labels = [for (final d in starts) days <= 7 ? DateFormat('E').format(d).substring(0, 2) : '${d.day}'];
-      } else if (days <= 120) {
-        starts = [for (var d = from; d.isBefore(rangeEnd); d = d.add(const Duration(days: 7))) d];
-        labels = [for (final d in starts) DateFormat('d/M').format(d)];
-      } else {
-        starts = [for (var d = DateTime(from.year, from.month, 1); d.isBefore(rangeEnd); d = DateTime(d.year, d.month + 1, 1)) d];
-        if (starts.isNotEmpty) starts[0] = from;
-        labels = [for (final d in starts) DateFormat('MMM').format(d).substring(0, 1)];
-      }
-    } else if (period == 'week') {
-      starts = [for (var i = 6; i >= 0; i--) today.subtract(Duration(days: i))];
-      labels = [for (final d in starts) DateFormat('E').format(d).substring(0, 2)];
-      rangeEnd = today.add(const Duration(days: 1));
-    } else if (period == 'month') {
-      starts = [for (var i = 3; i >= 0; i--) today.subtract(Duration(days: 7 * i + 6))];
-      labels = ['W1', 'W2', 'W3', 'W4'];
-      rangeEnd = today.add(const Duration(days: 1));
+      from = DateTime(custom!.start.year, custom!.start.month, custom!.start.day);
+      to = DateTime(custom!.end.year, custom!.end.month, custom!.end.day).add(const Duration(days: 1));
     } else {
-      starts = [for (var i = 11; i >= 0; i--) DateTime(now.year, now.month - i, 1)];
-      labels = [for (final d in starts) DateFormat('MMM').format(d).substring(0, 1)];
-      rangeEnd = DateTime(now.year, now.month + 1, 1);
+      to = today.add(const Duration(days: 1));
+      from = switch (period) {
+        'week' => today.subtract(const Duration(days: 6)),
+        'quarter' => today.subtract(const Duration(days: 90)),
+        'year' => DateTime(now.year - 1, now.month + 1, 1),
+        _ => today.subtract(const Duration(days: 29)),
+      };
     }
-    DateTime endOf(int i) => i + 1 < starts.length ? starts[i + 1] : rangeEnd;
-    bool inRange(DateTime d) => !d.isBefore(starts.first) && d.isBefore(rangeEnd);
-
-    final done = s.todos.where((t) => t.done && t.completedAt != null).toList();
-    final counts = [for (var i = 0; i < starts.length; i++) done.where((t) => !t.completedAt!.isBefore(starts[i]) && t.completedAt!.isBefore(endOf(i))).length];
-    final inPeriod = counts.fold<int>(0, (x, y) => x + y);
-    final created = s.todos.where((t) => inRange(t.createdAt)).length;
-    final rate = created == 0 ? 0.0 : (inPeriod / math.max(created, inPeriod)).clamp(0.0, 1.0);
-
-    // Streak: consecutive days (ending today or yesterday) with a completed to-do
-    var streak = 0;
-    var day = today;
-    final doneDays = done.map((t) => DateTime(t.completedAt!.year, t.completedAt!.month, t.completedAt!.day)).toSet();
-    if (!doneDays.contains(day)) day = day.subtract(const Duration(days: 1));
-    while (doneDays.contains(day)) {
-      streak++;
-      day = day.subtract(const Duration(days: 1));
+    final days = to.difference(from).inDays;
+    final prevFrom = from.subtract(Duration(days: days));
+    late List<DateTime> starts;
+    late String Function(DateTime) label;
+    if (days <= 14) {
+      starts = [for (var i = 0; i < days; i++) from.add(Duration(days: i))];
+      label = (d) => days <= 7 ? DateFormat('E').format(d).substring(0, 2) : '${d.day}';
+    } else if (days <= 120) {
+      starts = [for (var d = from; d.isBefore(to); d = d.add(const Duration(days: 7))) d];
+      label = (d) => DateFormat('d MMM').format(d);
+    } else {
+      starts = [for (var d = DateTime(from.year, from.month, 1); d.isBefore(to); d = DateTime(d.year, d.month + 1, 1)) d];
+      starts[0] = from;
+      label = (d) => DateFormat('MMM').format(d);
     }
+    DateTime endOf(int i) => i + 1 < starts.length ? starts[i + 1] : to;
+    bool inR(DateTime? d) => d != null && !d.isBefore(from) && d.isBefore(to);
+    bool inPrev(DateTime? d) => d != null && !d.isBefore(prevFrom) && d.isBefore(from);
+    List<int> bucket(Iterable<DateTime> dates) => [for (var i = 0; i < starts.length; i++) dates.where((d) => !d.isBefore(starts[i]) && d.isBefore(endOf(i))).length];
 
-    // Money from projects created in the range, grouped by currency
-    final money = <String, (double, double)>{};
-    for (final p in s.projects.where((p) => (p.amount ?? 0) > 0 && (period == 'custom' ? inRange(p.createdAt) : true))) {
-      final cur = money[p.currency] ?? (0.0, 0.0);
-      money[p.currency] = (cur.$1 + p.net, cur.$2 + p.fee);
+    // ---------- numbers ----------
+    final doneDates = s.todos.where((t) => t.done && t.completedAt != null).map((t) => t.completedAt!).toList();
+    final todosDone = doneDates.where(inR).length, todosPrev = doneDates.where(inPrev).length;
+    final projDone = s.projects.where((p) => p.done && inR(p.completedAt)).toList();
+    final projPrev = s.projects.where((p) => p.done && inPrev(p.completedAt)).length;
+    final notesNew = s.notes.where((n) => inR(n.createdAt)).length, notesPrev = s.notes.where((n) => inPrev(n.createdAt)).length;
+    final sessions = [
+      for (final e in (f.ready ? FocusEngine.log(f.p) : const <String>[]))
+        if (e.split('|').length >= 3 && e.split('|')[2] == 'focus') (DateTime.fromMillisecondsSinceEpoch(int.tryParse(e.split('|')[0]) ?? 0), int.tryParse(e.split('|')[1]) ?? 0),
+    ];
+    final focusMin = sessions.where((x) => inR(x.$1)).fold<int>(0, (a, b) => a + b.$2);
+    final focusPrev = sessions.where((x) => inPrev(x.$1)).fold<int>(0, (a, b) => a + b.$2);
+    final money = <String, double>{};
+    for (final p in projDone.where((p) => (p.amount ?? 0) > 0)) {
+      money[p.currency] = (money[p.currency] ?? 0) + p.net;
     }
+    final moneyPrev = s.projects.where((p) => p.done && inPrev(p.completedAt) && (p.amount ?? 0) > 0).fold<double>(0, (a, p) => a + p.net);
 
-    final byStatus = [for (final st in s.statuses) (st, s.projects.where((p) => p.status == st.key).length)].where((e) => e.$2 > 0).toList();
-    final byCat = [for (final c in s.todoCats) (c, done.where((t) => t.category == c.key && inRange(t.completedAt!)).length)]..sort((x, y) => y.$2.compareTo(x.$2));
-    final catTotal = byCat.fold<int>(0, (x, y) => x + y.$2);
-    final f = focus.summary;
+    final doneSeries = bucket(doneDates);
+    final addedSeries = bucket(s.todos.map((t) => t.createdAt));
+    String hm(int m) => m >= 60 ? '${m ~/ 60}h ${m % 60}m' : '${m}m';
+    String delta(num now, num before, {String Function(num)? fmt}) {
+      final d = now - before;
+      if (d == 0) return 'Same as before';
+      final v = fmt != null ? fmt(d.abs()) : '${d.abs().round()}';
+      return '${d > 0 ? '+' : '−'}$v vs before';
+    }
 
     final rangeText = period == 'custom' && custom != null
-        ? '${DateFormat('d MMM y').format(custom!.start)} – ${DateFormat('d MMM y').format(custom!.end)}'
-        : '${DateFormat('d MMM').format(starts.first)} – ${DateFormat('d MMM').format(rangeEnd.subtract(const Duration(days: 1)))}';
+        ? '${DateFormat('d MMM y').format(from)} – ${DateFormat('d MMM y').format(to.subtract(const Duration(days: 1)))}'
+        : '${DateFormat('d MMM').format(from)} – ${DateFormat('d MMM y').format(today)} · compared with the ${days} days before';
 
-    if (deskWide(context)) {
-      final muted = context.mutedText;
-      final maxC = counts.fold<int>(1, math.max);
-      Widget kpi(String label, String value, {String? extra, bool last = false}) => Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-              decoration: BoxDecoration(border: last ? null : const Border(right: BorderSide(color: deskLine))),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: muted)),
-                Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-                  Text(value, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
-                  if (extra != null) ...[const SizedBox(width: 8), Text(extra, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF1E7A50)))],
-                ]),
-              ]),
-            ),
-          );
-      Widget line(String k, Widget v, {bool last = false}) => Container(
-            padding: const EdgeInsets.symmetric(vertical: 9),
-            decoration: BoxDecoration(border: last ? null : const Border(bottom: BorderSide(color: deskLine))),
-            child: Row(children: [Expanded(child: Text(k, style: TextStyle(fontSize: 13.5, color: muted))), v]),
-          );
-      final statusTotal = byStatus.fold<int>(0, (x, y) => x + y.$2);
-      final moneyRows = [
-        for (final e in money.entries) ('You receive · ${e.key}', fmtMoney(e.value.$1, e.key), const Color(0xFF1E7A50)),
-        for (final e in money.entries.where((e) => e.value.$2 > 0)) ('Platform fees · ${e.key}', fmtMoney(e.value.$2, e.key), const Color(0xFFB42318)),
-      ];
-      final sessions = [for (final e in (focus.ready ? FocusEngine.log(focus.p) : const <String>[])) e.split('|')].where((x) => x.length >= 3 && x[2] == 'focus').map((x) => (DateTime.fromMillisecondsSinceEpoch(int.tryParse(x[0]) ?? 0), int.tryParse(x[1]) ?? 0)).where((x) => inRange(x.$1)).toList();
-      final longest = sessions.fold<int>(0, (x, y) => math.max(x, y.$2));
-      final focusMin = sessions.fold<int>(0, (x, y) => x + y.$2);
-      return DeskScroll(children: [
-        DeskHead('Stats', subtitle: rangeText, actions: [
-          DeskSeg<String>(
-            items: const [('week', 'Week'), ('month', 'Month'), ('year', 'Year'), ('custom', 'Custom')],
-            value: period,
-            onChanged: (v) => v == 'custom' ? _pickRange() : setState(() => period = v),
-          ),
-        ]),
-        const SizedBox(height: 18),
-        DeskCard(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: IntrinsicHeight(
-            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              kpi('To-dos done', '$inPeriod'),
-              kpi('Completion', '${(rate * 100).round()}%'),
-              kpi('Day streak', '$streak day${streak == 1 ? '' : 's'}'),
-              kpi('Focus time', '${focusMin ~/ 60}h ${focusMin % 60}m', last: true),
-            ]),
-          ),
-        ),
-        const SizedBox(height: 18),
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(
-            flex: 8,
-            child: DeskCard(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                const DeskH('Completed to-dos'),
+    // ---------- breakdowns ----------
+    final active = s.projects.where((p) => !p.done).toList();
+    final byStatus = [for (final st in s.statuses) (st.label, st.key == 'complete' ? s.projects.where((p) => p.done).length : active.where((p) => p.status == st.key).length)].where((e) => e.$2 > 0).toList();
+    final doneTodos = s.todos.where((t) => t.done && inR(t.completedAt)).toList();
+    final byCat = [for (final c in s.todoCats) (c.label, doneTodos.where((t) => t.category == c.key).length)].where((e) => e.$2 > 0).toList()..sort((a, b) => b.$2 - a.$2);
+    final byFolder = [for (final sec in s.sections) (sec.title, s.notes.where((n) => n.sectionId == sec.id).length)].where((e) => e.$2 > 0).toList()..sort((a, b) => b.$2 - a.$2);
+    final flow = <(String, int, Color)>[
+      ('Added', s.projects.where((p) => inR(p.createdAt)).length, const Color(0xFFC9C0FF)),
+      for (final st in s.statuses.where((st) => st.key != 'complete' && st.key != 'cancelled').take(3)) (st.label, active.where((p) => p.status == st.key).length, pastel(st.color).bg),
+      ('Complete', projDone.length, _green),
+    ];
+    // Busiest days: last 12 weeks, Monday-first rows
+    final weekStart = today.subtract(Duration(days: today.weekday - 1 + 7 * 11));
+    final heat = List.generate(7, (r) => List.generate(12, (c) {
+          final d = weekStart.add(Duration(days: c * 7 + r));
+          return d.isAfter(today) ? -1 : doneDates.where((x) => x.year == d.year && x.month == d.month && x.day == d.day).length;
+        }));
+    final perWeekday = List.generate(7, (i) => doneDates.where((d) => d.weekday == i + 1).length);
+    final busiest = perWeekday.every((v) => v == 0) ? null : DateFormat('EEEE').format(DateTime(2024, 1, 1 + perWeekday.indexOf(perWeekday.reduce(math.max)))); // 1 Jan 2024 = Monday
+    final focusByDay = List.generate(7, (i) => sessions.where((x) => inR(x.$1) && x.$1.weekday == i + 1).fold<int>(0, (a, b) => a + b.$2));
+
+    // ---------- pieces ----------
+    final kpis = <Widget>[
+      _Kpi('To-dos done', '$todosDone', delta(todosDone, todosPrev), const Color(0xFFE3F7EC), const Color(0xFF2FA36B), doneSeries),
+      _Kpi('Projects completed', '${projDone.length}', delta(projDone.length, projPrev), const Color(0xFFEFEBFF), const Color(0xFF6E5CE6), bucket(projDone.map((p) => p.completedAt!))),
+      _Kpi('Notes written', '$notesNew', delta(notesNew, notesPrev), const Color(0xFFFFF3DC), const Color(0xFFC98A12), bucket(s.notes.map((n) => n.createdAt))),
+      _Kpi('Focus time', hm(focusMin), delta(focusMin, focusPrev, fmt: (v) => hm(v.round())), const Color(0xFFF5E9FF), const Color(0xFF9B4FD6), bucket([for (final x in sessions) for (var k = 0; k < (x.$2 / 25).ceil(); k++) x.$1])),
+      _Kpi(
+        'Earned',
+        money.isEmpty ? '—' : money.entries.map((e) => fmtMoney(e.value, e.key)).join(' · '),
+        money.isEmpty ? 'From completed projects' : delta(money.values.fold<double>(0, (a, b) => a + b), moneyPrev, fmt: (v) => v.round().toString()),
+        const Color(0xFFE6F1FF),
+        const Color(0xFF3E7BFA),
+        bucket(projDone.where((p) => (p.amount ?? 0) > 0).map((p) => p.completedAt!)),
+      ),
+    ];
+
+    Widget legendRow(String l, String v, Color c) => Padding(
+          padding: const EdgeInsets.only(bottom: 9),
+          child: Row(children: [
+            Container(width: 10, height: 10, decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(3))),
+            const SizedBox(width: 8),
+            Expanded(child: Text(l, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))),
+            Text(v, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+          ]),
+        );
+    Widget donutCard(String title, List<(String, int)> data, String centerLabel, {bool percent = false}) {
+      final total = data.fold<int>(0, (a, b) => a + b.$2);
+      return _Card(
+        title: title,
+        child: total == 0
+            ? Padding(padding: const EdgeInsets.symmetric(vertical: 24), child: Text('Nothing here yet.', style: TextStyle(color: muted)))
+            : Row(children: [
                 SizedBox(
-                  height: 240,
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                    for (var i = 0; i < counts.length; i++) ...[
-                      if (i > 0) SizedBox(width: counts.length > 14 ? 4 : 14),
-                      Expanded(
-                        child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-                          Text('${counts[i]}', style: TextStyle(fontSize: 12, color: i == counts.length - 1 ? context.selInk : muted, fontWeight: i == counts.length - 1 ? FontWeight.w700 : FontWeight.w400)),
-                          const SizedBox(height: 6),
-                          Container(height: 8 + 170.0 * counts[i] / maxC, decoration: BoxDecoration(color: i == counts.length - 1 ? a : const Color(0xFFDCDDFD), borderRadius: BorderRadius.circular(8))),
-                          const SizedBox(height: 6),
-                          Text(labels[i], maxLines: 1, style: TextStyle(fontSize: 12, color: i == counts.length - 1 ? context.selInk : muted, fontWeight: i == counts.length - 1 ? FontWeight.w700 : FontWeight.w400)),
-                        ]),
-                      ),
-                    ],
+                  width: 130,
+                  height: 130,
+                  child: Stack(alignment: Alignment.center, children: [
+                    CustomPaint(size: const Size(130, 130), painter: _Donut([for (var i = 0; i < data.length; i++) (data[i].$2.toDouble(), _chartCols[i % _chartCols.length])])),
+                    Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text('$total', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                      Text(centerLabel, style: TextStyle(fontSize: 11, color: muted)),
+                    ]),
+                  ]),
+                ),
+                const SizedBox(width: 18),
+                Expanded(
+                  child: Column(children: [
+                    for (var i = 0; i < data.length && i < 6; i++)
+                      legendRow(data[i].$1, percent ? '${(100 * data[i].$2 / total).round()}%' : '${data[i].$2}', _chartCols[i % _chartCols.length]),
                   ]),
                 ),
               ]),
+      );
+    }
+
+    final activity = _Card(
+      title: 'Activity flow',
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(width: 14, height: 3, color: _violet),
+        Text('  Done   ', style: TextStyle(fontSize: 11.5, color: muted)),
+        Container(width: 14, height: 3, color: _pink),
+        Text('  Added', style: TextStyle(fontSize: 11.5, color: muted)),
+      ]),
+      child: Column(children: [
+        SizedBox(height: 190, width: double.infinity, child: CustomPaint(painter: _Area(doneSeries, addedSeries, context.isDark))),
+        const SizedBox(height: 6),
+        Row(children: [
+          for (var i = 0; i < starts.length; i++)
+            Expanded(
+              child: Text(starts.length > 8 && i % (starts.length / 6).ceil() != 0 ? '' : label(starts[i]),
+                  textAlign: i == 0 ? TextAlign.left : (i == starts.length - 1 ? TextAlign.right : TextAlign.center), maxLines: 1, style: TextStyle(fontSize: 10.5, color: muted)),
             ),
-          ),
-          const SizedBox(width: 18),
-          Expanded(
-            flex: 4,
-            child: DeskCard(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                const DeskH('Projects by status'),
-                if (byStatus.isEmpty) Text('No projects yet.', style: TextStyle(color: muted))
-                else ...[
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(7),
-                    child: SizedBox(height: 14, child: Row(children: [for (final e in byStatus) Expanded(flex: e.$2, child: Container(margin: const EdgeInsets.only(right: 2), color: pastel(e.$1.color).fg))])),
-                  ),
-                  const SizedBox(height: 14),
-                  for (final e in byStatus)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(children: [
-                        Container(width: 10, height: 10, decoration: BoxDecoration(color: pastel(e.$1.color).fg, borderRadius: BorderRadius.circular(3))),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(e.$1.label, style: const TextStyle(fontSize: 13.5))),
-                        Text('${e.$2}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-                      ]),
-                    ),
-                  Text('$statusTotal projects', style: TextStyle(fontSize: 12, color: muted)),
-                ],
+        ]),
+      ]),
+    );
+
+    final flowCard = _Card(
+      title: 'Project flow',
+      subtitle: 'Added in this time, where active projects are now, and what you completed',
+      child: SizedBox(
+        height: 190,
+        child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          for (var i = 0; i < flow.length; i++) ...[
+            Expanded(
+              child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 500),
+                  height: 40 + 110.0 * flow[i].$2 / math.max(1, flow.map((e) => e.$2).reduce(math.max)),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(color: context.isDark ? flow[i].$3.withOpacity(0.35) : flow[i].$3, borderRadius: BorderRadius.circular(14)),
+                  child: Text('${flow[i].$2}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF2A2A3A))),
+                ),
+                const SizedBox(height: 8),
+                Text(flow[i].$1, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
               ]),
             ),
-          ),
+            if (i < flow.length - 1) Padding(padding: const EdgeInsets.only(bottom: 30, left: 4, right: 4), child: Icon(Icons.arrow_forward_rounded, size: 18, color: muted)),
+          ],
         ]),
-        const SizedBox(height: 18),
-        IntrinsicHeight(
-          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Expanded(
-              child: DeskCard(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  const DeskH('Earnings'),
-                  if (moneyRows.isEmpty) Text('Add an amount to a project to see earnings.', style: TextStyle(color: muted, fontSize: 13.5)),
-                  for (var i = 0; i < moneyRows.length; i++)
-                    line(moneyRows[i].$1, Text(moneyRows[i].$2, style: TextStyle(fontWeight: FontWeight.w700, color: moneyRows[i].$3)), last: i == moneyRows.length - 1),
-                ]),
-              ),
-            ),
-            const SizedBox(width: 18),
-            Expanded(
-              child: DeskCard(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  const DeskH('Where your time goes'),
-                  if (catTotal == 0) Text('Finish some to-dos to see this.', style: TextStyle(color: muted, fontSize: 13.5)),
-                  for (final e in byCat.where((e) => e.$2 > 0).take(5))
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                        Row(children: [Expanded(child: Text(e.$1.label, style: const TextStyle(fontSize: 13.5))), Text('${(100 * e.$2 / catTotal).round()}%', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5))]),
-                        const SizedBox(height: 5),
-                        deskBar(e.$2 / catTotal, pastel(e.$1.color).fg, h: 8),
-                      ]),
+      ),
+    );
+
+    final foldersCard = _Card(
+      title: 'Notes by folder',
+      child: byFolder.isEmpty
+          ? Text('No notes in folders yet.', style: TextStyle(color: muted))
+          : Column(children: [
+              for (var i = 0; i < byFolder.length && i < 5; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 11),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    Row(children: [Expanded(child: Text(byFolder[i].$1, style: const TextStyle(fontSize: 13))), Text('${byFolder[i].$2}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13))]),
+                    const SizedBox(height: 5),
+                    deskBar(byFolder[i].$2 / byFolder.first.$2, _chartCols[i % _chartCols.length], h: 8),
+                  ]),
+                ),
+            ]),
+    );
+
+    final heatCard = _Card(
+      title: 'Your busiest days',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        for (var r = 0; r < 7; r++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(children: [
+              SizedBox(width: 18, child: Text('MTWTFSS'[r], style: TextStyle(fontSize: 10, color: muted))),
+              for (var c = 0; c < 12; c++)
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: AspectRatio(
+                      aspectRatio: 1,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(4),
+                          color: heat[r][c] < 0
+                              ? Colors.transparent
+                              : [context.isDark ? Colors.white10 : const Color(0xFFF1EFFB), const Color(0xFFDDD6FF), const Color(0xFFB9ACFA), _violet, const Color(0xFF6E5CE6)][math.min(4, heat[r][c])],
+                        ),
+                      ),
                     ),
-                ]),
-              ),
-            ),
-            const SizedBox(width: 18),
-            Expanded(
-              child: DeskCard(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  const DeskH('Focus sessions'),
-                  line('Sessions', Text('${sessions.length}', style: const TextStyle(fontWeight: FontWeight.w700))),
-                  line('Longest', Text('$longest min', style: const TextStyle(fontWeight: FontWeight.w700))),
-                  line('All time', Text('${f.$4} sessions', style: const TextStyle(fontWeight: FontWeight.w700)), last: true),
-                ]),
-              ),
-            ),
-          ]),
-        ),
+                  ),
+                ),
+            ]),
+          ),
+        const SizedBox(height: 6),
+        Text(busiest == null ? 'Finish some to-dos to see your rhythm.' : 'You get the most done on ${busiest}s', style: TextStyle(fontSize: 12, color: muted)),
+      ]),
+    );
+
+    final maxFocus = math.max(1, focusByDay.reduce(math.max));
+    final focusCard = _Card(
+      title: 'Focus time',
+      child: Column(children: [
+        for (var i = 0; i < 7; i++)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Row(children: [
+              SizedBox(width: 36, child: Text(DateFormat('E').format(DateTime(2024, 1, 1 + i)), style: TextStyle(fontSize: 12.5, color: muted))),
+              Expanded(child: deskBar(focusByDay[i] / maxFocus, _violet, h: 10)),
+              SizedBox(width: 64, child: Text(focusByDay[i] == 0 ? '—' : hm(focusByDay[i]), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700))),
+            ]),
+          ),
+      ]),
+    );
+
+    final status = donutCard('Projects by status', byStatus, 'projects');
+    final cats = donutCard('To-dos by category', byCat, 'done', percent: true);
+    final periodItems = const [('week', 'Week'), ('month', 'Month'), ('quarter', 'Quarter'), ('year', 'Year'), ('custom', 'Custom')];
+    void pick(String v) => v == 'custom' ? _pickRange() : setState(() => period = v);
+
+    // ---------- computers ----------
+    if (deskWide(context)) {
+      Widget row(List<(int, Widget)> cells) => IntrinsicHeight(
+            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              for (var i = 0; i < cells.length; i++) ...[if (i > 0) const SizedBox(width: 18), Expanded(flex: cells[i].$1, child: cells[i].$2)],
+            ]),
+          );
+      return DeskScroll(children: [
+        DeskHead('Your stats', subtitle: rangeText, actions: [DeskSeg<String>(items: periodItems, value: period, onChanged: pick)]),
+        const SizedBox(height: 18),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [for (var i = 0; i < kpis.length; i++) ...[if (i > 0) const SizedBox(width: 14), Expanded(child: kpis[i])]]),
+        const SizedBox(height: 18),
+        row([(8, activity), (4, status)]),
+        const SizedBox(height: 18),
+        row([(8, flowCard), (4, cats)]),
+        const SizedBox(height: 18),
+        row([(4, foldersCard), (4, heatCard), (4, focusCard)]),
       ]);
     }
 
+    // ---------- phones ----------
     return Scaffold(
       body: SafeArea(
-        child: SyncRefresh(
-          child: ListView(padding: const EdgeInsets.fromLTRB(0, 0, 0, 40), children: [
-            const Header('Stats'),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                const SizedBox(height: 4),
-                Segmented<String>(
-                  items: const [('week', 'Week'), ('month', 'Month'), ('year', 'Year'), ('custom', 'Custom')],
-                  value: period,
-                  onChanged: (v) {
-                    if (v == 'custom') {
-                      _pickRange();
-                    } else {
-                      setState(() => period = v);
-                    }
-                  },
-                ),
-                const SizedBox(height: 10),
-                // From – to
-                Material(
-                  color: context.tint,
-                  borderRadius: BorderRadius.circular(16),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(16),
-                    onTap: _pickRange,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                      child: Row(children: [
-                        Icon(Icons.date_range_rounded, size: 19, color: context.onTint),
-                        const SizedBox(width: 10),
-                        Expanded(child: Text(rangeText, style: TextStyle(fontWeight: FontWeight.w600, color: context.onTint, fontSize: 13.5))),
-                        Text('Change', style: TextStyle(color: context.onTint.withOpacity(0.8), fontWeight: FontWeight.w600, fontSize: 12.5)),
-                        Icon(Icons.chevron_right_rounded, size: 18, color: context.onTint),
-                      ]),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(children: [
-                  _Kpi(value: '$inPeriod', label: 'Done', icon: Icons.task_alt_rounded, color: pal[0]),
-                  const SizedBox(width: 10),
-                  _Kpi(value: '${(rate * 100).round()}%', label: 'Completion', icon: Icons.donut_large_rounded, color: pal[1]),
-                  const SizedBox(width: 10),
-                  _Kpi(value: '$streak', label: 'Day streak', icon: Icons.local_fire_department_outlined, color: pal[2]),
-                ]),
-                const Label('Completed to-dos'),
-                Box(child: SizedBox(height: 170, child: _Bars(values: counts, labels: labels, color: a))),
-                if (money.isNotEmpty) ...[
-                  const Label('Earnings'),
-                  for (final e in money.entries)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Box(
-                        child: Row(children: [
-                          _Bubble(icon: Icons.payments_outlined, color: pal[3]),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text('You receive · ${e.key}', style: TextStyle(color: context.mutedText, fontWeight: FontWeight.w600, fontSize: 12.5)),
-                              Text(fmtMoney(e.value.$1, e.key), style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700, color: _ink(pal[3], dark))),
-                            ]),
-                          ),
-                          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                            Text('Platform fees', style: TextStyle(fontSize: 12, color: context.mutedText)),
-                            Text(fmtMoney(e.value.$2, e.key), style: TextStyle(fontWeight: FontWeight.w700, color: _ink(pal[2], dark))),
-                          ]),
-                        ]),
-                      ),
-                    ),
-                ],
-                if (byStatus.isNotEmpty) ...[
-                  const Label('Projects by status'),
-                  Box(
-                    child: Row(children: [
-                      SizedBox(
-                        width: 124,
-                        height: 124,
-                        child: TweenAnimationBuilder<double>(
-                          tween: Tween(begin: 0, end: 1),
-                          duration: const Duration(milliseconds: 900),
-                          curve: Curves.easeOutCubic,
-                          builder: (_, v, __) => CustomPaint(
-                            painter: _Donut([for (var i = 0; i < byStatus.length; i++) (pal[i % pal.length], byStatus[i].$2.toDouble())], v, track: a.withOpacity(0.08)),
-                            child: Center(
-                              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                                Text('${s.projects.length}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-                                Text('projects', style: TextStyle(fontSize: 11, color: context.mutedText)),
-                              ]),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 18),
-                      Expanded(
-                        child: Column(children: [
-                          for (var i = 0; i < byStatus.length; i++)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              child: Row(children: [
-                                Container(width: 10, height: 10, decoration: BoxDecoration(color: pal[i % pal.length], borderRadius: BorderRadius.circular(3))),
-                                const SizedBox(width: 8),
-                                Expanded(child: Text(byStatus[i].$1.label, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13.5))),
-                                Text('${byStatus[i].$2}', style: TextStyle(fontWeight: FontWeight.w700, color: _ink(pal[i % pal.length], dark))),
-                              ]),
-                            ),
-                        ]),
-                      ),
-                    ]),
-                  ),
-                ],
-                const Label('Where your time goes'),
-                Box(
-                  child: catTotal == 0
-                      ? Text('Finish a few to-dos in this period and you’ll see which categories take your time.', style: TextStyle(color: context.mutedText, height: 1.5))
-                      : Column(children: [
-                          for (final (i, e) in byCat.where((e) => e.$2 > 0).indexed)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 6),
-                              child: Row(children: [
-                                _Bubble(icon: iconOf(e.$1.icon), color: pal[i % pal.length], size: 34),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                    Row(children: [
-                                      Expanded(child: Text(e.$1.label, style: const TextStyle(fontWeight: FontWeight.w600))),
-                                      Text('${(e.$2 * 100 / catTotal).round()}%', style: TextStyle(fontWeight: FontWeight.w700, color: _ink(pal[i % pal.length], dark))),
-                                    ]),
-                                    const SizedBox(height: 5),
-                                    TweenAnimationBuilder<double>(
-                                      tween: Tween(begin: 0, end: e.$2 / catTotal),
-                                      duration: Duration(milliseconds: 600 + i * 80),
-                                      curve: Curves.easeOutCubic,
-                                      builder: (_, v, __) => ClipRRect(
-                                        borderRadius: BorderRadius.circular(4),
-                                        child: LinearProgressIndicator(value: v, minHeight: 7, color: pal[i % pal.length], backgroundColor: pal[i % pal.length].withOpacity(0.16)),
-                                      ),
-                                    ),
-                                  ]),
-                                ),
-                              ]),
-                            ),
-                        ]),
-                ),
-                const Label('Focus'),
-                Row(children: [
-                  _Kpi(value: '${f.$1}', label: 'Sessions today', icon: Icons.timer_outlined, color: pal[4]),
-                  const SizedBox(width: 10),
-                  _Kpi(value: '${f.$2}m', label: 'Focus today', icon: Icons.self_improvement_rounded, color: pal[5]),
-                  const SizedBox(width: 10),
-                  _Kpi(value: '${(f.$3 / 60).toStringAsFixed(f.$3 < 600 ? 1 : 0)}h', label: 'Last 7 days', icon: Icons.bolt_rounded, color: pal[6]),
-                ]),
-                const Label('All time'),
-                Row(children: [
-                  _Kpi(value: '${s.projects.length}', label: 'Projects', icon: Icons.work_outline_rounded, color: pal[0]),
-                  const SizedBox(width: 10),
-                  _Kpi(value: '${done.length}', label: 'To-dos done', icon: Icons.check_circle_outline_rounded, color: pal[1]),
-                  const SizedBox(width: 10),
-                  _Kpi(value: '${s.notes.length}', label: 'Notes', icon: Icons.sticky_note_2_outlined, color: pal[3]),
-                ]),
-              ]),
-            ),
-          ]),
-        ),
+        child: ListView(padding: const EdgeInsets.only(bottom: 40), children: [
+          const Header('Your stats'),
+          SizedBox(
+            height: 38,
+            child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 20), children: [
+              for (final it in periodItems) Padding(padding: const EdgeInsets.only(right: 8), child: DeskFilter(it.$2, on: period == it.$1, onTap: () => pick(it.$1))),
+            ]),
+          ),
+          Padding(padding: const EdgeInsets.fromLTRB(22, 10, 22, 12), child: Text(rangeText, style: TextStyle(fontSize: 12.5, color: muted))),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 1.25,
+                children: kpis.take(4).toList(),
+              ),
+              const SizedBox(height: 10),
+              kpis[4],
+              for (final w in [activity, status, cats, flowCard, foldersCard, heatCard, focusCard]) ...[const SizedBox(height: 12), w],
+            ]),
+          ),
+        ]),
       ),
     );
   }
 }
 
-/// Readable text in a soft colour (a bit deeper in light mode).
-Color _ink(Color c, bool dark) => dark ? c : Color.lerp(c, Colors.black, 0.25)!;
-
-class _Bubble extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final double size;
-  const _Bubble({required this.icon, required this.color, this.size = 44});
+class _Card extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final Widget? trailing;
+  final Widget child;
+  const _Card({required this.title, this.subtitle, this.trailing, required this.child});
   @override
   Widget build(BuildContext context) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(color: color.withOpacity(context.isDark ? 0.22 : 0.16), borderRadius: BorderRadius.circular(size * 0.32)),
-        child: Icon(icon, size: size * 0.5, color: _ink(color, context.isDark)),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+        decoration: softCard(20, context.surface),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [Expanded(child: Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700))), if (trailing != null) trailing!]),
+          if (subtitle != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text(subtitle!, style: TextStyle(fontSize: 12, color: context.mutedText))),
+          const SizedBox(height: 14),
+          child,
+        ]),
       );
 }
 
 class _Kpi extends StatelessWidget {
-  final String value, label;
-  final IconData icon;
-  final Color color;
-  const _Kpi({required this.value, required this.label, required this.icon, required this.color});
+  final String label, value, delta;
+  final Color bg, fg;
+  final List<int> series;
+  const _Kpi(this.label, this.value, this.delta, this.bg, this.fg, this.series);
   @override
-  Widget build(BuildContext context) => Expanded(
-        child: Box(
-          padding: const EdgeInsets.all(14),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            _Bubble(icon: icon, color: color, size: 34),
-            const SizedBox(height: 10),
-            Text(value, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
-            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, color: context.mutedText, fontWeight: FontWeight.w500)),
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        decoration: softCard(20, context.surface),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            Container(width: 28, height: 28, decoration: BoxDecoration(color: context.isDark ? fg.withOpacity(0.2) : bg, borderRadius: BorderRadius.circular(9)), child: Center(child: Container(width: 9, height: 9, decoration: BoxDecoration(color: fg, shape: BoxShape.circle)))),
+            const SizedBox(width: 8),
+            Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: context.mutedText))),
           ]),
-        ),
+          const SizedBox(height: 8),
+          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(value, maxLines: 1, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.5))),
+                Text(delta, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: delta.startsWith('−') ? const Color(0xFFD9731A) : (delta.startsWith('+') ? const Color(0xFF1E7A50) : context.mutedText))),
+              ]),
+            ),
+            if (series.length > 1) SizedBox(width: 70, height: 28, child: CustomPaint(painter: _Spark(series, fg))),
+          ]),
+        ]),
       );
 }
 
-class _Bars extends StatelessWidget {
-  final List<int> values;
-  final List<String> labels;
-  final Color color;
-  const _Bars({required this.values, required this.labels, required this.color});
-  @override
-  Widget build(BuildContext context) {
-    final maxV = math.max(1, values.fold<int>(0, math.max));
-    final peak = values.isEmpty ? -1 : values.indexOf(values.fold<int>(0, math.max));
-    final soft = Color.lerp(color, Colors.white, context.isDark ? 0.15 : 0.35)!;
-    return Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-      for (var i = 0; i < values.length; i++)
-        Expanded(
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: values.length > 10 ? 1.5 : 3),
-            child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-              Text(values[i] == 0 ? '' : '${values[i]}', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: context.mutedText)),
-              const SizedBox(height: 4),
-              TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: 6 + 110 * values[i] / maxV),
-                duration: Duration(milliseconds: 500 + i * 40),
-                curve: Curves.easeOutCubic,
-                builder: (_, h, __) => Container(
-                  height: h,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: i == peak && values[i] > 0 ? [soft, color] : [color.withOpacity(0.22), color.withOpacity(0.12)],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(labels[i], maxLines: 1, overflow: TextOverflow.clip, style: TextStyle(fontSize: 10.5, color: context.mutedText, fontWeight: FontWeight.w600)),
-            ]),
-          ),
-        ),
-    ]);
-  }
-}
-
+/// Ring chart.
 class _Donut extends CustomPainter {
-  final List<(Color, double)> parts;
-  final double progress;
-  final Color track;
-  _Donut(this.parts, this.progress, {required this.track});
+  final List<(double, Color)> parts;
+  _Donut(this.parts);
   @override
   void paint(Canvas canvas, Size size) {
-    final total = parts.fold<double>(0, (a, b) => a + b.$2);
-    final rect = Rect.fromCircle(center: size.center(Offset.zero), radius: size.shortestSide / 2 - 9);
-    canvas.drawArc(rect, 0, math.pi * 2, false, Paint()
-      ..color = track
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 16);
+    final total = parts.fold<double>(0, (a, b) => a + b.$1);
     if (total == 0) return;
+    const th = 18.0;
+    final rect = Rect.fromLTWH(th / 2, th / 2, size.width - th, size.height - th);
     var start = -math.pi / 2;
     for (final p in parts) {
-      final sweep = 2 * math.pi * p.$2 / total * progress;
-      canvas.drawArc(rect, start + 0.05, math.max(0.0, sweep - 0.10), false, Paint()
-        ..color = p.$1
+      final sweep = 2 * math.pi * p.$1 / total;
+      canvas.drawArc(rect, start + 0.03, math.max(0.001, sweep - 0.06), false, Paint()
+        ..color = p.$2
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 16
-        ..strokeCap = StrokeCap.round);
+        ..strokeWidth = th
+        ..strokeCap = StrokeCap.butt);
       start += sweep;
     }
   }
 
   @override
-  bool shouldRepaint(covariant _Donut old) => true;
+  bool shouldRepaint(covariant _Donut o) => true;
+}
+
+/// Smooth "done" area + dashed "added" line.
+class _Area extends CustomPainter {
+  final List<int> a, b;
+  final bool dark;
+  _Area(this.a, this.b, this.dark);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final grid = Paint()
+      ..color = dark ? Colors.white10 : const Color(0xFFEFEDF8)
+      ..strokeWidth = 1;
+    for (var k = 1; k < 4; k++) {
+      canvas.drawLine(Offset(0, size.height * k / 4), Offset(size.width, size.height * k / 4), grid);
+    }
+    final n = a.length;
+    if (n < 2) return;
+    final mx = math.max(1, [...a, ...b].reduce(math.max)) * 1.15;
+    List<Offset> pts(List<int> v) => [for (var i = 0; i < n; i++) Offset(i * size.width / (n - 1), size.height - v[i] / mx * size.height)];
+    Path smooth(List<Offset> p) {
+      final path = Path()..moveTo(p[0].dx, p[0].dy);
+      for (var i = 1; i < p.length; i++) {
+        final cx = (p[i - 1].dx + p[i].dx) / 2;
+        path.cubicTo(cx, p[i - 1].dy, cx, p[i].dy, p[i].dx, p[i].dy);
+      }
+      return path;
+    }
+
+    final pa = smooth(pts(a));
+    final fill = Path.from(pa)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(fill, Paint()..shader = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [_violet.withOpacity(0.28), _violet.withOpacity(0)]).createShader(Offset.zero & size));
+    canvas.drawPath(pa, Paint()
+      ..color = _violet
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round);
+    // dashed "added"
+    final pb = smooth(pts(b));
+    final dash = Paint()
+      ..color = _pink
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5;
+    for (final m in pb.computeMetrics()) {
+      for (double d = 0; d < m.length; d += 12) {
+        canvas.drawPath(m.extractPath(d, d + 6), dash);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _Area o) => true;
+}
+
+/// Tiny trend line for the number cards.
+class _Spark extends CustomPainter {
+  final List<int> v;
+  final Color c;
+  _Spark(this.v, this.c);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final mx = math.max(1, v.reduce(math.max));
+    final path = Path();
+    for (var i = 0; i < v.length; i++) {
+      final p = Offset(i * size.width / (v.length - 1), size.height - 2 - v[i] / mx * (size.height - 4));
+      i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
+    }
+    canvas.drawPath(path, Paint()
+      ..color = c
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.4
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round);
+  }
+
+  @override
+  bool shouldRepaint(covariant _Spark o) => true;
 }

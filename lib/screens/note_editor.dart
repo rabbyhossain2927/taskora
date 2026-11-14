@@ -86,6 +86,22 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
     }
   }
 
+  /// "#word" right before the caret: (where the # is, the word after it).
+  (int, String)? _hashAt(QuillController c) {
+    final text = c.document.toPlainText();
+    final at = c.selection.baseOffset;
+    if (at <= 0 || at > text.length) return null;
+    var i = at - 1;
+    while (i >= 0 && text[i] != '#' && !RegExp(r'\s').hasMatch(text[i])) {
+      i--;
+    }
+    if (i < 0 || text[i] != '#') return null;
+    if (i > 0 && !RegExp(r'\s').hasMatch(text[i - 1])) return null; // "abc#x" isn't a tag
+    final word = text.substring(i + 1, at);
+    if (word.length > 30) return null;
+    return (i, word);
+  }
+
   // The fix bar shows when you tap a marked word, not while you're typing one.
   DateTime _typedAt = DateTime(2000);
 
@@ -625,6 +641,75 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                   ],
                 ),
               ),
+              // ---------- "#" picks a folder (or tag) for this note ----------
+              if (fc != null && focused != null && fc.selection.isCollapsed && (_nodes[focused!]?.hasFocus ?? false) && _hashAt(fc) != null)
+                Builder(builder: (context) {
+                  final h = _hashAt(fc)!;
+                  final q = h.$2.toLowerCase();
+                  final folders = store.sections.where((x) => x.title.toLowerCase().contains(q)).take(6).toList();
+                  final tags = store.tags.where((t) => t.toLowerCase().contains(q) && !n.tags.contains(t)).take(4).toList();
+                  void clearHash() => fc.replaceText(h.$1, h.$2.length + 1, '', TextSelection.collapsed(offset: h.$1));
+                  Widget opt(IconData ic, String t, String kind, VoidCallback onTap) => Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Material(
+                          color: context.isDark ? Colors.white10 : const Color(0xFFF3F1FA),
+                          borderRadius: BorderRadius.circular(99),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(99),
+                            onTap: onTap,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(ic, size: 16, color: context.accent),
+                                const SizedBox(width: 6),
+                                Text(t, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+                                Text('  $kind', style: TextStyle(fontSize: 11.5, color: context.mutedText)),
+                              ]),
+                            ),
+                          ),
+                        ),
+                      );
+                  return TextFieldTapRegion(
+                    child: Container(
+                      decoration: BoxDecoration(color: context.surface, border: Border(top: BorderSide(color: context.accent.withOpacity(0.35), width: 1.5))),
+                      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                      child: Row(children: [
+                        Icon(Icons.tag_rounded, size: 18, color: context.accent),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(children: [
+                              for (final sec in folders)
+                                opt(Icons.folder_rounded, sec.title, 'Folder', () {
+                                  clearHash();
+                                  setState(() => n.sectionId = sec.id);
+                                  _changed();
+                                  showUndo(context, 'Note moved to “${sec.title}”', () async => setState(() => n.sectionId = null));
+                                }),
+                              for (final t in tags)
+                                opt(Icons.sell_outlined, t, 'Tag', () {
+                                  clearHash();
+                                  setState(() => n.tags.add(t));
+                                  _changed();
+                                }),
+                              if (q.isNotEmpty && !store.sections.any((x) => x.title.toLowerCase() == q))
+                                opt(Icons.create_new_folder_outlined, h.$2, 'New folder', () async {
+                                  clearHash();
+                                  final sec = NoteSection(id: newId(), title: h.$2, order: store.sections.length);
+                                  await store.saveSection(sec);
+                                  setState(() => n.sectionId = sec.id);
+                                  _changed();
+                                }),
+                              if (folders.isEmpty && tags.isEmpty && q.isEmpty) Text('Type a folder or tag name', style: TextStyle(fontSize: 12.5, color: context.mutedText)),
+                            ]),
+                          ),
+                        ),
+                      ]),
+                    ),
+                  );
+                })
+              else
               // ---------- spelling / grammar fix bar ----------
               if (fc != null && focused != null && fc.selection.isCollapsed && (_nodes[focused!]?.hasFocus ?? false) && DateTime.now().difference(_typedAt).inMilliseconds > 700)
                 Builder(builder: (context) {
