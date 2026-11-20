@@ -299,6 +299,15 @@ function tool_list(): array {
             ], 'required' => ['project_id']],
         ],
         [
+            'name' => 'attach_file',
+            'description' => 'Attach an image or file to a project. It shows in the project\'s Files in TaskOra. Send the file as base64 (max 30 MB).',
+            'inputSchema' => ['type' => 'object', 'properties' => [
+                'project_id' => ['type' => 'string'],
+                'file_name' => ['type' => 'string', 'description' => 'File name with its extension, e.g. order-screenshot.jpg'],
+                'file_base64' => ['type' => 'string', 'description' => 'The file contents, base64 encoded.'],
+            ], 'required' => ['project_id', 'file_name', 'file_base64']],
+        ],
+        [
             'name' => 'delete_task',
             'description' => 'Delete tasks. They go to TaskOra\'s Trash, where they can be restored for 30 days. Confirm with the owner first.',
             'inputSchema' => ['type' => 'object', 'properties' => [
@@ -443,6 +452,44 @@ function tool_call(string $uid, string $name, array $a): array {
             }
             put_doc($uid, 'projects', $id, $p);
             return ['project' => project_view($id, $p)];
+
+        case 'attach_file':
+            $id = (string) ($a['project_id'] ?? '');
+            $p = doc($uid, 'projects', $id);
+            if ($p === null) throw new InvalidArgumentException('No project with that project_id. Use list_projects to find it.');
+            $raw = base64_decode(preg_replace('/^data:[^,]*,|\\s+/', '', (string) ($a['file_base64'] ?? '')), true);
+            if ($raw === false || $raw === '') throw new InvalidArgumentException('file_base64 is empty or not valid base64.');
+            $size = strlen($raw);
+            if ($size > 30 * 1024 * 1024) throw new InvalidArgumentException('Files can be up to 30 MB.');
+            ensure_tables();
+            $usedQ = db()->prepare('SELECT COALESCE(SUM(size), 0) FROM taskora_files WHERE uid = ?');
+            $usedQ->execute([$uid]);
+            if ((int) $usedQ->fetchColumn() + $size > 2 * 1024 * 1024 * 1024) throw new InvalidArgumentException('Your 2 GB storage is full. Delete some files first.');
+            $name = preg_replace('/[^\pL\pN ._()-]+/u', '_', text_arg($a, 'file_name', 200, 'file')) ?: 'file';
+            $mime = 'application/octet-stream';
+            if (function_exists('finfo_open')) {
+                $fi = finfo_open(FILEINFO_MIME_TYPE);
+                $mime = (string) (finfo_buffer($fi, $raw) ?: $mime);
+            }
+            if ($mime === 'application/octet-stream' || $mime === 'text/plain') {
+                $map = ['png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'gif' => 'image/gif', 'webp' => 'image/webp',
+                        'heic' => 'image/heic', 'pdf' => 'application/pdf', 'mp4' => 'video/mp4', 'mp3' => 'audio/mpeg', 'txt' => 'text/plain',
+                        'zip' => 'application/zip'];
+                $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+                if (isset($map[$ext])) $mime = $map[$ext];
+            }
+            if (preg_match('#(html|javascript|xml|svg|x-php)#i', $mime)) $mime = 'application/octet-stream'; // never serve active content
+            $fid = bin2hex(random_bytes(20));
+            $dir = files_dir() . '/' . substr(hash('sha256', $uid), 0, 24); // same place files.php uses
+            if (!is_dir($dir)) @mkdir($dir, 0755, true);
+            if (@file_put_contents("$dir/$fid", $raw) === false) throw new RuntimeException('Could not save the file.');
+            db()->prepare('INSERT INTO taskora_files (id, uid, name, mime, size, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+                ->execute([$fid, $uid, $name, $mime, $size, now_ms()]);
+            $url = 'https://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . rtrim(dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/taskora-api/connector.php')), '/') . "/files.php?id=$fid";
+            $att = ['id' => $fid, 'name' => $name, 'mime' => $mime, 'size' => $size, 'url' => $url];
+            $p['files'] = array_values(array_merge(is_array($p['files'] ?? null) ? $p['files'] : [], [$att]));
+            put_doc($uid, 'projects', $id, $p);
+            return ['attached' => $name, 'project' => $p['title'] ?? '', 'url' => $url];
 
         case 'delete_task':
             $ids = $a['task_ids'] ?? null;
