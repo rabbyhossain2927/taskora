@@ -30,6 +30,12 @@
     #splash .bar::after { content: ""; display: block; width: 40%; height: 100%; border-radius: 4px; background: #7054FB; animation: slide 1.1s ease-in-out infinite; }
     @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
     @keyframes pop { from { transform: scale(.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    /* Browser grammar add-ons draw their own lines in the wrong place on Flutter's canvas. Hide them;
+       TaskOra has its own checker. Also hide the hidden text box's own caret (the 2nd cursor). */
+    grammarly-desktop-integration, grammarly-extension, grammarly-popups, [data-grammarly-shadow-root],
+    lt-toolbar, lt-highlighter, lt-div, lt-mirror { display: none !important; }
+    flt-text-editing-host textarea, flt-text-editing-host input, flt-text-editing-host [contenteditable],
+    flutter-view textarea, flutter-view input { caret-color: transparent !important; color: transparent !important; }
   </style>
 </head>
 <body>

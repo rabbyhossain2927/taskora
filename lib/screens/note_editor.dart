@@ -192,9 +192,73 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
         // Keep the toolbar (undo, styles) up to date.
         c.addListener(() {
           if (mounted && focused == b) setState(() {});
+          final sel = c.selection;
+          Future.delayed(const Duration(milliseconds: 400), () => _maybeFixMenu(b, c, sel));
         });
         return c;
       });
+
+  int _menuAt = -1; // caret spot the last fix menu was shown for
+
+  /// Clicked on a red/blue word: show the fixes right under it.
+  Future<void> _maybeFixMenu(NoteBlock b, QuillController c, TextSelection sel) async {
+    if (!mounted || c.selection != sel || !sel.isCollapsed || !(_nodes[b]?.hasFocus ?? false)) return;
+    if (DateTime.now().difference(_typedAt).inMilliseconds < 700) return; // typing, not clicking
+    final issue = SpellCheck.issueAt(c.document.toPlainText(), sel.baseOffset);
+    if (issue == null) {
+      _menuAt = -1;
+      return;
+    }
+    if (_menuAt == issue.start) return;
+    final st = _keys[b]?.currentState;
+    if (st is! QuillEditorState) return;
+    final re = st.editableTextKey.currentState?.renderEditor;
+    if (re == null || !re.attached) return;
+    final r = re.getLocalRectForCaret(TextPosition(offset: issue.start));
+    final p = re.localToGlobal(r.bottomLeft + const Offset(0, 6));
+    _menuAt = issue.start;
+    final col = issue.grammar ? const Color(0xFF3E7BFA) : const Color(0xFFE5484D);
+    final pick = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(p.dx, p.dy, p.dx + 1, p.dy + 1),
+      constraints: const BoxConstraints(minWidth: 200, maxWidth: 320),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      items: [
+        PopupMenuItem<String>(
+          enabled: false,
+          height: 34,
+          child: Row(children: [
+            Icon(issue.grammar ? Icons.edit_note_rounded : Icons.spellcheck_rounded, size: 17, color: col),
+            const SizedBox(width: 8),
+            Expanded(child: Text(issue.grammar ? issue.message : 'Spelling', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: context.mutedText))),
+          ]),
+        ),
+        if (issue.fixes.isEmpty) PopupMenuItem<String>(enabled: false, height: 36, child: Text('No suggestions', style: TextStyle(fontSize: 13.5, color: context.mutedText))),
+        for (final f in issue.fixes)
+          PopupMenuItem<String>(value: 'fix:$f', height: 38, child: Text(f, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: col))),
+        const PopupMenuDivider(height: 8),
+        if (!issue.grammar) const PopupMenuItem<String>(value: 'add', height: 36, child: Text('Add to dictionary', style: TextStyle(fontSize: 13.5))),
+        const PopupMenuItem<String>(value: 'ignore', height: 36, child: Text('Ignore', style: TextStyle(fontSize: 13.5))),
+      ],
+    );
+    if (!mounted) return;
+    if (pick == null) {
+      _nodes[b]?.requestFocus();
+      return;
+    }
+    _menuAt = -1;
+    if (pick == 'add') {
+      SpellCheck.addWord(issue.word);
+    } else if (pick == 'ignore') {
+      SpellCheck.ignore(issue.word);
+    } else {
+      final w = pick.substring(4);
+      SpellCheck.grammar = SpellCheck.grammar.where((g) => g.text != issue.word).toList();
+      c.replaceText(issue.start, issue.length, w, TextSelection.collapsed(offset: issue.start + w.length));
+      SpellCheck.changed.value++;
+    }
+    _nodes[b]?.requestFocus();
+  }
 
   FocusNode _nodeFor(NoteBlock b) => _nodes.putIfAbsent(b, () {
         final f = FocusNode();
@@ -709,57 +773,7 @@ class _NoteEditorState extends State<NoteEditor> with WidgetsBindingObserver {
                     ),
                   );
                 })
-              else
-              // ---------- spelling / grammar fix bar ----------
-              if (fc != null && focused != null && fc.selection.isCollapsed && (_nodes[focused!]?.hasFocus ?? false) && DateTime.now().difference(_typedAt).inMilliseconds > 700)
-                Builder(builder: (context) {
-                  final plain = fc.document.toPlainText();
-                  final issue = SpellCheck.issueAt(plain, fc.selection.baseOffset);
-                  if (issue == null) return const SizedBox.shrink();
-                  final col = issue.grammar ? const Color(0xFF3E7BFA) : const Color(0xFFE5484D);
-                  void fix(String w) {
-                    fc.replaceText(issue.start, issue.length, w, TextSelection.collapsed(offset: issue.start + w.length));
-                    if (issue.grammar) SpellCheck.ignore(issue.word);
-                  }
-                  Widget pill(String t, VoidCallback onTap, {bool main = false}) => Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: Material(
-                          color: main ? col : (context.isDark ? Colors.white10 : const Color(0xFFF3F1FA)),
-                          borderRadius: BorderRadius.circular(99),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(99),
-                            onTap: onTap,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                              child: Text(t, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: main ? Colors.white : null)),
-                            ),
-                          ),
-                        ),
-                      );
-                  return TextFieldTapRegion(
-                    child: Container(
-                      decoration: BoxDecoration(color: context.surface, border: Border(top: BorderSide(color: col.withOpacity(0.35), width: 1.5))),
-                      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
-                      child: Row(children: [
-                        Icon(issue.grammar ? Icons.edit_note_rounded : Icons.spellcheck_rounded, size: 18, color: col),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(children: [
-                              if (issue.grammar)
-                                Padding(padding: const EdgeInsets.only(right: 8), child: Text(issue.message, style: TextStyle(fontSize: 12.5, color: context.mutedText))),
-                              if (issue.fixes.isEmpty) Padding(padding: const EdgeInsets.only(right: 8), child: Text('No suggestions', style: TextStyle(fontSize: 12.5, color: context.mutedText))),
-                              for (var k = 0; k < issue.fixes.length; k++) pill(issue.fixes[k], () => fix(issue.fixes[k]), main: k == 0),
-                              if (!issue.grammar) pill('Add to dictionary', () => SpellCheck.addWord(issue.word)),
-                              pill('Ignore', () => SpellCheck.ignore(issue.word)),
-                            ]),
-                          ),
-                        ),
-                      ]),
-                    ),
-                  );
-                }),
+              ,
               // ---------- toolbar ----------
               TextFieldTapRegion(
                 child: Container(

@@ -1,6 +1,7 @@
 // ignore_for_file: deprecated_member_use
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,9 +12,25 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// A grammar problem found by LanguageTool in the open note.
 class GrammarIssue {
   final String text; // the words that are wrong
+  final String left, right; // a few characters around them, so only THIS spot is marked
   final String message;
   final List<String> fixes;
-  const GrammarIssue(this.text, this.message, this.fixes);
+  const GrammarIssue(this.text, this.left, this.right, this.message, this.fixes);
+
+  /// Where this issue sits in [t] (start index), or -1. Needs the same words
+  /// around it, so another "the" elsewhere isn't marked too.
+  int findIn(String t) {
+    var i = t.indexOf(text);
+    while (i >= 0) {
+      final l = t.substring(math.max(0, i - left.length), i);
+      final r = t.substring(i + text.length, math.min(t.length, i + text.length + right.length));
+      final lOk = left.endsWith(l) || l.endsWith(left) || l.isEmpty;
+      final rOk = right.startsWith(r) || r.startsWith(right) || r.isEmpty;
+      if (lOk && rOk && (l.isNotEmpty || r.isNotEmpty || left.isEmpty)) return i;
+      i = t.indexOf(text, i + 1);
+    }
+    return -1;
+  }
 }
 
 /// What's wrong at a spot in the text, and how to fix it.
@@ -142,11 +159,8 @@ class SpellCheck extends SpellCheckerService<Object> {
   static TextIssue? issueAt(String text, int offset) {
     if (!on) return null;
     for (final g in grammar) {
-      var i = text.indexOf(g.text);
-      while (i >= 0) {
-        if (offset >= i && offset <= i + g.text.length) return TextIssue(i, g.text.length, g.text, true, g.message, g.fixes);
-        i = text.indexOf(g.text, i + 1);
-      }
+      final i = g.findIn(text);
+      if (i >= 0 && offset >= i && offset <= i + g.text.length) return TextIssue(i, g.text.length, g.text, true, g.message, g.fixes);
     }
     for (final m in _wordRe.allMatches(text)) {
       if (m.start > offset) break;
@@ -189,7 +203,13 @@ class SpellCheck extends SpellCheckerService<Object> {
         final words = t.substring(off, off + len);
         if (words.trim().isEmpty || _ignored.contains(words.toLowerCase())) continue;
         final fixes = [for (final f in (x['replacements'] as List? ?? const []).take(4)) (f['value'] ?? '').toString()].where((s) => s.isNotEmpty).toList();
-        out.add(GrammarIssue(words, (x['shortMessage'] as String?)?.isNotEmpty == true ? x['shortMessage'] : (x['message'] ?? 'Grammar'), fixes));
+        out.add(GrammarIssue(
+          words,
+          t.substring(math.max(0, off - 12), off),
+          t.substring(off + len, math.min(t.length, off + len + 12)),
+          (x['shortMessage'] as String?)?.isNotEmpty == true ? x['shortMessage'] : (x['message'] ?? 'Grammar'),
+          fixes,
+        ));
       }
       grammar = out;
       changed.value++;
@@ -224,11 +244,8 @@ class SpellCheck extends SpellCheckerService<Object> {
     if (!on || text.isEmpty) return null;
     final marks = <(int, int, bool)>[]; // start, end, grammar?
     for (final g in grammar) {
-      var i = text.indexOf(g.text);
-      while (i >= 0) {
-        marks.add((i, i + g.text.length, true));
-        i = text.indexOf(g.text, i + g.text.length);
-      }
+      final i = g.findIn(text);
+      if (i >= 0) marks.add((i, i + g.text.length, true));
     }
     if (_rank.isNotEmpty) {
       for (final m in _wordRe.allMatches(text)) {
